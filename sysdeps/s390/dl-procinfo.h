@@ -1,5 +1,5 @@
 /* s390 version of processor capability information handling macros.
-   Copyright (C) 2006-2020 Free Software Foundation, Inc.
+   Copyright (C) 2006-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Martin Schwidefsky <schwidefsky@de.ibm.com>, 2006.
 
@@ -51,8 +51,11 @@ enum
   HWCAP_S390_HIGH_GPRS = 1 << 9,
   HWCAP_S390_TE = 1 << 10,
   HWCAP_S390_VX = 1 << 11,
+  HWCAP_S390_VXRS = HWCAP_S390_VX,
   HWCAP_S390_VXD = 1 << 12,
+  HWCAP_S390_VXRS_BCD = HWCAP_S390_VXD,
   HWCAP_S390_VXE = 1 << 13,
+  HWCAP_S390_VXRS_EXT = HWCAP_S390_VXE,
   HWCAP_S390_GS = 1 << 14,
   HWCAP_S390_VXRS_EXT2 = 1 << 15,
   HWCAP_S390_VXRS_PDE = 1 << 16,

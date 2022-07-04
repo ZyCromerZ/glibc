@@ -1,5 +1,5 @@
 /* Definitions for thread-local data handling.  Hurd version.
-   Copyright (C) 2003-2020 Free Software Foundation, Inc.
+   Copyright (C) 2003-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -60,7 +60,7 @@
 #define THREAD_GSCOPE_RESET_FLAG() \
   do 									      \
     if (atomic_exchange_and_add_rel (&GL(dl_thread_gscope_count), -1) == 1)   \
-      lll_wake (&GL(dl_thread_gscope_count), 0);			      \
+      lll_wake (GL(dl_thread_gscope_count), 0);				      \
   while (0)
 #define THREAD_GSCOPE_WAIT() \
   do 									      \
@@ -68,7 +68,7 @@
       int count;							      \
       atomic_write_barrier ();						      \
       while ((count = GL(dl_thread_gscope_count)))			      \
-        lll_wait (&GL(dl_thread_gscope_count), count, 0);		      \
+        lll_wait (GL(dl_thread_gscope_count), count, 0);		      \
     }									      \
   while (0)
 

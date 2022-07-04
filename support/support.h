@@ -1,5 +1,5 @@
 /* Common extra functions.
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -114,10 +114,17 @@ extern const char support_libdir_prefix[];
 extern const char support_bindir_prefix[];
 /* Corresponds to the install's sbin/ directory.  */
 extern const char support_sbindir_prefix[];
+/* Corresponds to the install's system /lib or /lib64 directory.  */
+extern const char support_slibdir_prefix[];
 /* Corresponds to the install's sbin/ directory (without prefix).  */
 extern const char support_install_rootsbindir[];
 /* Corresponds to the install's compiled locale directory.  */
 extern const char support_complocaledir_prefix[];
+
+/* Copies the file at the path FROM to TO.  If TO does not exist, it
+   is created.  If TO is a regular file, it is truncated before
+   copying.  The file mode is copied, but the permissions are not.  */
+extern void support_copy_file (const char *from, const char *to);
 
 extern ssize_t support_copy_file_range (int, off64_t *, int, off64_t *,
 					size_t, unsigned int);

@@ -1,5 +1,5 @@
 /* Get descriptor for character set conversion.
-   Copyright (C) 1997-2020 Free Software Foundation, Inc.
+   Copyright (C) 1997-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Ulrich Drepper <drepper@cygnus.com>, 1997.
 
@@ -39,7 +39,7 @@ iconv_open (const char *tocode, const char *fromcode)
 
   int res = __gconv_open (&conv_spec, &cd, 0);
 
-  gconv_destroy_spec (&conv_spec);
+  __gconv_destroy_spec (&conv_spec);
 
   if (__builtin_expect (res, __GCONV_OK) != __GCONV_OK)
     {

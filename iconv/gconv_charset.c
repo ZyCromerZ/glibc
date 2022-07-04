@@ -1,5 +1,5 @@
 /* Charset name normalization.
-   Copyright (C) 2020 Free Software Foundation, Inc.
+   Copyright (C) 2020-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -216,3 +216,13 @@ out:
   return ret;
 }
 libc_hidden_def (__gconv_create_spec)
+
+
+void
+__gconv_destroy_spec (struct gconv_spec *conv_spec)
+{
+  free (conv_spec->fromcode);
+  free (conv_spec->tocode);
+  return;
+}
+libc_hidden_def (__gconv_destroy_spec)

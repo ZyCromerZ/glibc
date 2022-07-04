@@ -1,4 +1,4 @@
-/* Copyright (C) 1991-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1991-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -64,7 +64,7 @@ __kill (pid_t pid, int sig)
 	    {
 	      if (msgport != MACH_PORT_NULL)
 		/* Send a signal message to his message port.  */
-		return __msg_sig_post (msgport, sig, 0, refport);
+		return __msg_sig_post (msgport, sig, SI_USER, refport);
 
 	      /* The process has no message port.  Perhaps try direct
 		 frobnication of the task.  */

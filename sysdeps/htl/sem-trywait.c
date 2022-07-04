@@ -1,5 +1,5 @@
 /* Lock a semaphore if it does not require blocking.  Generic version.
-   Copyright (C) 2005-2020 Free Software Foundation, Inc.
+   Copyright (C) 2005-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -24,18 +24,13 @@
 int
 __sem_trywait (sem_t *sem)
 {
-  __pthread_spin_wait (&sem->__lock);
-  if (sem->__value > 0)
-    /* Successful down.  */
-    {
-      sem->__value--;
-      __pthread_spin_unlock (&sem->__lock);
-      return 0;
-    }
-  __pthread_spin_unlock (&sem->__lock);
+  struct new_sem *isem = (struct new_sem *) sem;
+
+  if (__sem_waitfast (isem, 1) == 0)
+    return 0;
 
   errno = EAGAIN;
   return -1;
 }
 
-strong_alias (__sem_trywait, sem_trywait);
+weak_alias (__sem_trywait, sem_trywait);

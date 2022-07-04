@@ -1,4 +1,4 @@
-/* Copyright (C) 1991-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1991-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -25,6 +25,13 @@ ENTRY (syscall)
 	mr   r6,r7
 	mr   r7,r8
 	mr   r8,r9
-	sc
-	PSEUDO_RET
+#if !IS_IN(rtld) && (defined(__PPC64__) || defined(__powerpc64__))
+	CHECK_SCV_SUPPORT r9 0f
+	DO_CALL_SCV
+	RET_SCV
+	b 1f
+#endif
+0:	DO_CALL_SC
+	RET_SC
+1:	TAIL_CALL_SYSCALL_ERROR
 PSEUDO_END (syscall)

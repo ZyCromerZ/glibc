@@ -1,5 +1,5 @@
 /* Operating system support for run-time dynamic linker.  Hurd version.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright (C) 1995-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -57,8 +57,6 @@ extern char **_environ;
 
 int __libc_enable_secure = 0;
 rtld_hidden_data_def (__libc_enable_secure)
-int __libc_multiple_libcs = 0;	/* Defining this here avoids the inclusion
-				   of init-first.  */
 /* This variable contains the lowest stack address ever used.  */
 void *__libc_stack_end = NULL;
 rtld_hidden_data_def(__libc_stack_end)
@@ -73,7 +71,7 @@ struct hurd_startup_data *_dl_hurd_data;
 # define fmh()		((void)0)
 # define unfmh()	((void)0)
 #else
-/* XXX loser kludge for vm_map kernel bug */
+/* XXX loser kludge for vm_map kernel bug, fixed by gnumach's 0650a4ee30e3 */
 #undef	ELF_MACHINE_USER_ADDRESS_MASK
 #define ELF_MACHINE_USER_ADDRESS_MASK	0
 static vm_address_t fmha;
@@ -125,9 +123,25 @@ _dl_sysdep_start (void **start_argptr,
       else
 	_dl_hurd_data = (void *) p;
 
+      GLRO(dl_platform) = NULL; /* Default to nothing known about the platform.  */
+
       __libc_enable_secure = _dl_hurd_data->flags & EXEC_SECURE;
 
       __tunables_init (_environ);
+
+#ifdef DL_SYSDEP_INIT
+      DL_SYSDEP_INIT;
+#endif
+
+#ifdef SHARED
+#ifdef DL_PLATFORM_INIT
+      DL_PLATFORM_INIT;
+#endif
+
+      /* Determine the length of the platform name.  */
+      if (GLRO(dl_platform) != NULL)
+	GLRO(dl_platformlen) = strlen (GLRO(dl_platform));
+#endif
 
       if (_dl_hurd_data->flags & EXEC_STACK_ARGS
 	  && _dl_hurd_data->user_entry == 0)
@@ -529,13 +543,11 @@ __mmap (void *addr, size_t len, int prot, int flags, int fd, off_t offset)
   return (void *) mapaddr;
 }
 
-check_no_hidden(__fxstat64);
+check_no_hidden(__fstat64);
 int weak_function
-__fxstat64 (int vers, int fd, struct stat64 *buf)
+__fstat64 (int fd, struct stat64 *buf)
 {
   error_t err;
-
-  assert (vers == _STAT_VER);
 
   err = __io_stat ((mach_port_t) fd, buf);
   if (err)
@@ -543,16 +555,14 @@ __fxstat64 (int vers, int fd, struct stat64 *buf)
 
   return 0;
 }
-libc_hidden_def (__fxstat64)
+libc_hidden_def (__fstat64)
 
-check_no_hidden(__xstat64);
+check_no_hidden(__stat64);
 int weak_function
-__xstat64 (int vers, const char *file, struct stat64 *buf)
+__stat64 (const char *file, struct stat64 *buf)
 {
   error_t err;
   mach_port_t port;
-
-  assert (vers == _STAT_VER);
 
   err = open_file (file, 0, &port, buf);
   if (err)
@@ -562,7 +572,7 @@ __xstat64 (int vers, const char *file, struct stat64 *buf)
 
   return 0;
 }
-libc_hidden_def (__xstat64)
+libc_hidden_def (__stat64)
 
 /* This function is called by the dynamic linker (rtld.c) to check
    whether debugging malloc is allowed even for SUID binaries.  This
@@ -625,7 +635,8 @@ __sbrk (intptr_t increment)
   return (void *) addr;
 }
 
-check_no_hidden(__strtoul_internal);
+/* This is only used by hurdlookup for the /dev/fd/nnn magic.
+ * We avoid pulling the whole libc implementation, and we can keep this hidden.  */
 unsigned long int weak_function
 __strtoul_internal (const char *nptr, char **endptr, int base, int group)
 {
@@ -682,7 +693,6 @@ abort (void)
 /* We need this alias to satisfy references from libc_pic.a objects
    that were affected by the libc_hidden_proto declaration for abort.  */
 strong_alias (abort, __GI_abort)
-strong_alias (abort, __GI___chk_fail)
 strong_alias (abort, __GI___fortify_fail)
 strong_alias (abort, __GI___assert_fail)
 strong_alias (abort, __GI___assert_perror_fail)

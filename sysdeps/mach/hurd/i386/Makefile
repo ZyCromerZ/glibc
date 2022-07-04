@@ -116,7 +116,6 @@ test-xfail-tst-cond13 = yes
 test-xfail-tst-cond23 = yes
 test-xfail-tst-rwlock4 = yes
 test-xfail-tst-rwlock12 = yes
-test-xfail-tst-sem3 = yes
 test-xfail-tst-barrier2 = yes
 test-xfail-tst-pututxline-cache = yes
 test-xfail-tst-pututxline-lockfail = yes
@@ -129,13 +128,6 @@ test-xfail-tst-signal2 = yes
 # (setprotocol support)
 test-xfail-tst-cond24 = yes
 test-xfail-tst-cond25 = yes
-
-# For bug 25524
-# (sem_open support)
-test-xfail-tst-sem4 = yes
-test-xfail-tst-sem7 = yes
-test-xfail-tst-sem8 = yes
-test-xfail-tst-sem9 = yes
 
 # For bug 25563
 # (robust support against dead threads)
@@ -153,6 +145,8 @@ ifeq ($(subdir),elf)
 # We do use nested functions involving creation of trampolines, notably for
 # callbacks whose parameters don't permit to get the context parameters.
 check-execstack-xfail += ld.so libc.so libpthread.so
+# We always create a thread for signals
+test-xfail-tst-single_threaded-pthread-static = yes
 endif
 
 ifeq ($(subdir),stdlib)

@@ -1,5 +1,5 @@
 /* Resource limits.
-   Copyright (C) 1994-2020 Free Software Foundation, Inc.
+   Copyright (C) 1994-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <hurd.h>
-#include <cthreads.h>
+#include <lock-intern.h>
 #include <hurd/resource.h>
 
 /* This must be given an initializer, or the a.out linking rules will

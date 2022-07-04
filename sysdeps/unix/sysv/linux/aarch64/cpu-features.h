@@ -1,6 +1,6 @@
 /* Initialize CPU feature data.  AArch64 version.
    This file is part of the GNU C Library.
-   Copyright (C) 2017-2020 Free Software Foundation, Inc.
+   Copyright (C) 2017-2021 Free Software Foundation, Inc.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -54,6 +54,10 @@
                         && MIDR_PARTNUM(midr) == 0x000)
 #define IS_NEOVERSE_N1(midr) (MIDR_IMPLEMENTOR(midr) == 'A'		      \
 			      && MIDR_PARTNUM(midr) == 0xd0c)
+#define IS_NEOVERSE_N2(midr) (MIDR_IMPLEMENTOR(midr) == 'A'		      \
+			      && MIDR_PARTNUM(midr) == 0xd49)
+#define IS_NEOVERSE_V1(midr) (MIDR_IMPLEMENTOR(midr) == 'A'		      \
+			      && MIDR_PARTNUM(midr) == 0xd40)
 
 #define IS_EMAG(midr) (MIDR_IMPLEMENTOR(midr) == 'P'			      \
                        && MIDR_PARTNUM(midr) == 0x000)
@@ -66,6 +70,8 @@ struct cpu_features
   uint64_t midr_el1;
   unsigned zva_size;
   bool bti;
+  /* Currently, the GLIBC memory tagging tunable only defines 8 bits.  */
+  uint8_t mte_state;
 };
 
 #endif /* _CPU_FEATURES_AARCH64_H  */

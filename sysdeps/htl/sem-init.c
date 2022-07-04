@@ -1,5 +1,5 @@
 /* Initialize a semaphore.  Generic version.
-   Copyright (C) 2005-2020 Free Software Foundation, Inc.
+   Copyright (C) 2005-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -24,12 +24,6 @@
 int
 __sem_init (sem_t *sem, int pshared, unsigned value)
 {
-  if (pshared != 0)
-    {
-      errno = EOPNOTSUPP;
-      return -1;
-    }
-
 #ifdef SEM_VALUE_MAX
   if (value > SEM_VALUE_MAX)
     {
@@ -38,7 +32,9 @@ __sem_init (sem_t *sem, int pshared, unsigned value)
     }
 #endif
 
-  *sem = (sem_t) __SEMAPHORE_INITIALIZER (pshared, value);
+  struct new_sem *isem = (struct new_sem *) sem;
+
+  *isem = (struct new_sem) __SEMAPHORE_INITIALIZER (value, pshared);
   return 0;
 }
 

@@ -1,5 +1,5 @@
 /* Stub versions of mutex_lock_solid/mutex_unlock_solid for no -lthreads.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright (C) 1995-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -17,11 +17,10 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include <lock-intern.h>
-#include <cthreads.h>
 
-/* If cthreads is linked in, it will define these functions itself to do
-   real cthreads mutex locks.  This file will only be linked in when
-   cthreads is not used, and `mutexes' are in fact just spin locks (and
+/* If pthread is linked in, it will define these functions itself to do
+   real pthread mutex locks.  This file will only be linked in when
+   pthread is not used, and `mutexes' are in fact just spin locks (and
    some unused storage).  */
 
 void

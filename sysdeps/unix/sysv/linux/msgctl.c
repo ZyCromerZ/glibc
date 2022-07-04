@@ -1,4 +1,4 @@
-/* Copyright (C) 1995-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1995-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Ulrich Drepper <drepper@gnu.ai.mit.edu>, August 1995.
 
@@ -88,18 +88,46 @@ __msgctl64 (int msqid, int cmd, struct __msqid64_ds *buf)
 {
 #if __IPC_TIME64
   struct kernel_msqid64_ds ksemid, *arg = NULL;
-  if (buf != NULL)
+#else
+  msgctl_arg_t *arg;
+#endif
+
+  switch (cmd)
     {
-      msqid64_to_kmsqid64 (buf, &ksemid);
-      arg = &ksemid;
-    }
+    case IPC_RMID:
+      arg = NULL;
+      break;
+
+    case IPC_SET:
+    case IPC_STAT:
+    case MSG_STAT:
+    case MSG_STAT_ANY:
+#if __IPC_TIME64
+      if (buf != NULL)
+	{
+	  msqid64_to_kmsqid64 (buf, &ksemid);
+	  arg = &ksemid;
+	}
 # ifdef __ASSUME_SYSVIPC_BROKEN_MODE_T
-  if (cmd == IPC_SET)
-    arg->msg_perm.mode *= 0x10000U;
+      if (cmd == IPC_SET)
+	arg->msg_perm.mode *= 0x10000U;
 # endif
 #else
-  msgctl_arg_t *arg = buf;
+      arg = buf;
 #endif
+      break;
+
+    case IPC_INFO:
+    case MSG_INFO:
+      /* This is a Linux extension where kernel returns a 'struct msginfo'
+	 instead.  */
+      arg = (__typeof__ (arg)) buf;
+      break;
+
+    default:
+      __set_errno (EINVAL);
+      return -1;
+    }
 
   int ret = msgctl_syscall (msqid, cmd, arg);
   if (ret < 0)
@@ -169,8 +197,15 @@ __msgctl (int msqid, int cmd, struct msqid_ds *buf)
   struct __msqid64_ds msqid64, *buf64 = NULL;
   if (buf != NULL)
     {
-      msqid_to_msqid64 (&msqid64, buf);
-      buf64 = &msqid64;
+      /* This is a Linux extension where kernel returns a 'struct msginfo'
+	 instead.  */
+      if (cmd == IPC_INFO || cmd == MSG_INFO)
+	buf64 = (struct __msqid64_ds *) buf;
+      else
+	{
+	  msqid_to_msqid64 (&msqid64, buf);
+	  buf64 = &msqid64;
+	}
     }
 
   int ret = __msgctl64 (msqid, cmd, buf64);

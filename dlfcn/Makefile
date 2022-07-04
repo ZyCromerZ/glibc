@@ -1,4 +1,4 @@
-# Copyright (C) 1995-2020 Free Software Foundation, Inc.
+# Copyright (C) 1995-2021 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 
 # The GNU C Library is free software; you can redistribute it and/or
@@ -52,7 +52,7 @@ ifeq (yes,$(build-shared))
 tests += tststatic tststatic2 tststatic3 tststatic4 tststatic5
 tests-static += tststatic tststatic2 tststatic3 tststatic4 tststatic5
 modules-names += modstatic modstatic2 modstatic3 modstatic5
-tststatic-ENV = LD_LIBRARY_PATH=$(objpfx):$(common-objpfx):$(common-objpfx)elf
+tststatic-ENV = LD_LIBRARY_PATH=$(ld-library-path):$(common-objpfx)elf
 tststatic2-ENV = $(tststatic-ENV)
 tststatic3-ENV = $(tststatic-ENV)
 tststatic4-ENV = $(tststatic-ENV)

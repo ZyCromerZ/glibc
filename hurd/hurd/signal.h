@@ -1,5 +1,5 @@
 /* Implementing POSIX.1 signals under the Hurd.
-   Copyright (C) 1993-2020 Free Software Foundation, Inc.
+   Copyright (C) 1993-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -37,7 +37,6 @@
 #include <bits/sigaction.h>
 #include <hurd/msg.h>
 
-#include <cthreads.h>		/* For `struct mutex'.  */
 #include <setjmp.h>		/* For `jmp_buf'.  */
 #include <spin-lock.h>
 struct hurd_signal_preemptor;	/* <hurd/sigpreempt.h> */
@@ -68,7 +67,9 @@ struct hurd_sigstate
 
     spin_lock_t lock;		/* Locks most of the rest of the structure.  */
 
+    /* The signal state holds a reference on the thread port.  */
     thread_t thread;
+
     struct hurd_sigstate *next; /* Linked-list of thread sigstates.  */
 
     sigset_t blocked;		/* What signals are blocked.  */
@@ -120,9 +121,9 @@ struct hurd_sigstate
 
 extern struct hurd_sigstate *_hurd_sigstates;
 
-extern struct mutex _hurd_siglock; /* Locks _hurd_sigstates.  */
-
-/* Get the sigstate of a given thread, taking its lock.  */
+/* Get the sigstate of a given thread.  If there was no sigstate for
+   the thread, one is created, and the thread gains a reference.  If
+   the given thread is MACH_PORT_NULL, return the global sigstate.  */
 
 extern struct hurd_sigstate *_hurd_thread_sigstate (thread_t);
 
@@ -165,7 +166,11 @@ _HURD_SIGNAL_H_EXTERN_INLINE struct hurd_sigstate *
 _hurd_self_sigstate (void)
 {
   if (THREAD_GETMEM (THREAD_SELF, _hurd_sigstate) == NULL)
-    THREAD_SETMEM (THREAD_SELF, _hurd_sigstate, _hurd_thread_sigstate (__mach_thread_self ()));
+    {
+      thread_t self = __mach_thread_self ();
+      THREAD_SETMEM (THREAD_SELF, _hurd_sigstate, _hurd_thread_sigstate (self));
+      __mach_port_deallocate (__mach_task_self (), self);
+    }
   return THREAD_GETMEM (THREAD_SELF, _hurd_sigstate);
 }
 # endif
@@ -213,12 +218,15 @@ _hurd_critical_section_lock (void)
   ss = THREAD_GETMEM (THREAD_SELF, _hurd_sigstate);
   if (ss == NULL)
     {
+      thread_t self = __mach_thread_self ();
+
       /* The thread variable is unset; this must be the first time we've
 	 asked for it.  In this case, the critical section flag cannot
 	 possible already be set.  Look up our sigstate structure the slow
 	 way.  */
-      ss = _hurd_thread_sigstate (__mach_thread_self ());
-      THREAD_SETMEM(THREAD_SELF, _hurd_sigstate, ss);
+      ss = _hurd_thread_sigstate (self);
+      THREAD_SETMEM (THREAD_SELF, _hurd_sigstate, ss);
+      __mach_port_deallocate (__mach_task_self (), self);
     }
 
   if (! __spin_try_lock (&ss->critical_section_lock))
@@ -291,6 +299,11 @@ extern int _hurd_raise_signal (struct hurd_sigstate *ss, int signo,
 extern void _hurd_exception2signal (struct hurd_signal_detail *detail,
 				    int *signo);
 
+/* Translate a Mach exception into a signal with a legacy sigcode.  */
+
+extern void _hurd_exception2signal_legacy (struct hurd_signal_detail *detail,
+					   int *signo);
+
 
 /* Make the thread described by SS take the signal described by SIGNO and
    DETAIL.  If the process is traced, this will in fact stop with a SIGNO
@@ -314,13 +327,14 @@ extern void _hurd_internal_post_signal (struct hurd_sigstate *ss,
 
 struct machine_thread_all_state;
 extern struct sigcontext *
-_hurd_setup_sighandler (struct hurd_sigstate *ss, __sighandler_t handler,
+_hurd_setup_sighandler (struct hurd_sigstate *ss, const struct sigaction *action,
+			__sighandler_t handler,
 			int signo, struct hurd_signal_detail *detail,
 			int rpc_wait, struct machine_thread_all_state *state);
 
 /* Function run by the signal thread to receive from the signal port.  */
 
-extern void _hurd_msgport_receive (void);
+extern void *_hurd_msgport_receive (void *arg);
 
 /* Set up STATE with a thread state that, when resumed, is
    like `longjmp (_hurd_sigthread_fault_env, 1)'.  */

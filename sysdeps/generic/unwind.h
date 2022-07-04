@@ -1,5 +1,5 @@
 /* Exception handling and frame unwind runtime interface routines.
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001-2021 Free Software Foundation, Inc.
 
    This file is part of the GNU C Library.
 
@@ -75,15 +75,21 @@ typedef void (*_Unwind_Exception_Cleanup_Fn) (_Unwind_Reason_Code,
 
 struct _Unwind_Exception
 {
-  _Unwind_Exception_Class exception_class;
-  _Unwind_Exception_Cleanup_Fn exception_cleanup;
-  _Unwind_Word private_1;
-  _Unwind_Word private_2;
+  union
+  {
+    struct
+    {
+      _Unwind_Exception_Class exception_class;
+      _Unwind_Exception_Cleanup_Fn exception_cleanup;
+      _Unwind_Word private_1;
+      _Unwind_Word private_2;
+    };
 
-  /* @@@ The IA-64 ABI says that this structure must be double-word aligned.
-     Taking that literally does not make much sense generically.  Instead we
-     provide the maximum alignment required by any type for the machine.  */
-} __attribute__((__aligned__));
+    /* The IA-64 ABI says that this structure must be double-word aligned.  */
+    _Unwind_Word unwind_exception_align[2]
+      __attribute__ ((__aligned__ (2 * sizeof (_Unwind_Word))));
+  };
+};
 
 
 /* The ACTIONS argument to the personality routine is a bitwise OR of one

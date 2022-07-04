@@ -1,5 +1,5 @@
 /* Convert text in given files from the specified from-set to the to-set.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Ulrich Drepper <drepper@cygnus.com>, 1998.
 
@@ -184,7 +184,7 @@ main (int argc, char *argv[])
       /* Let's see whether we have these coded character sets.  */
       res = __gconv_open (&conv_spec, &cd, 0);
 
-      gconv_destroy_spec (&conv_spec);
+      __gconv_destroy_spec (&conv_spec);
 
       if (res != __GCONV_OK)
 	{
@@ -406,7 +406,7 @@ print_version (FILE *stream, struct argp_state *state)
 Copyright (C) %s Free Software Foundation, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2020");
+"), "2021");
   fprintf (stream, gettext ("Written by %s.\n"), "Ulrich Drepper");
 }
 

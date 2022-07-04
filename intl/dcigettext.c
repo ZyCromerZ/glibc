@@ -1,5 +1,5 @@
 /* Implementation of the internal dcigettext function.
-   Copyright (C) 1995-2020 Free Software Foundation, Inc.
+   Copyright (C) 1995-2021 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU Lesser General Public License as published by
@@ -1120,15 +1120,18 @@ _nl_find_msg (struct loaded_l10nfile *domain_file,
 
 # ifdef _LIBC
 
-		      struct gconv_spec conv_spec
-		        = { .fromcode = norm_add_slashes (charset, ""),
-		            .tocode = norm_add_slashes (outcharset, ""),
-		            /* We always want to use transliteration.  */
-		            .translit = true,
-		            .ignore = false
-		          };
+		      struct gconv_spec conv_spec;
+
+                      __gconv_create_spec (&conv_spec, charset, outcharset);
+
+		      /* We always want to use transliteration.  */
+                      conv_spec.translit = true;
+
 		      int r = __gconv_open (&conv_spec, &convd->conv,
 		                            GCONV_AVOID_NOCONV);
+
+                      __gconv_destroy_spec (&conv_spec);
+
 		      if (__builtin_expect (r != __GCONV_OK, 0))
 			{
 			  /* If the output encoding is the same there is

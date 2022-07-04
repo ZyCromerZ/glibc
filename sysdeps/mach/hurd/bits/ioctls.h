@@ -1,4 +1,4 @@
-/* Copyright (C) 1992-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1992-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -321,6 +321,7 @@ enum __ioctl_datum { IOC_8, IOC_16, IOC_32, IOC_64 };
 /* Compatibility with 4.3 BSD terminal driver.
    From 4.4 <sys/ioctl_compat.h>.  */
 
+#ifdef __USE_MISC
 #ifdef USE_OLD_TTY
 # undef  TIOCGETD
 # define TIOCGETD	_IOR('t', 0, int)	/* get line discipline */
@@ -428,5 +429,6 @@ enum __ioctl_datum { IOC_8, IOC_16, IOC_32, IOC_64 };
 # define EXTA	14
 # define EXTB	15
 #endif /* USE_OLD_TTY */
+#endif
 
 #endif /* bits/ioctls.h */

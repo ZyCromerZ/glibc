@@ -1,5 +1,5 @@
 /* Internal definitions for pthreads library.
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -42,7 +42,7 @@
         return EDEADLK;   \
     }   \
   \
-  ret = cb (&mtxp->__lock, ##__VA_ARGS__);   \
+  ret = cb (mtxp->__lock, ##__VA_ARGS__);   \
   if (ret == 0 || ret == EOWNERDEAD)   \
     {   \
       if (mtxp->__owner_id == ENOTRECOVERABLE)   \

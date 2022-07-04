@@ -1,4 +1,4 @@
-/* Copyright (C) 1995-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1995-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Ulrich Drepper <drepper@gnu.ai.mit.edu>, August 1995.
 
@@ -102,6 +102,7 @@ semun64_to_ksemun64 (int cmd, union semun64 semun64,
       r.array = semun64.array;
       break;
     case SEM_STAT:
+    case SEM_STAT_ANY:
     case IPC_STAT:
     case IPC_SET:
       r.buf = buf;
@@ -150,12 +151,22 @@ __semctl64 (int semid, int semnum, int cmd, ...)
     case IPC_STAT:      /* arg.buf */
     case IPC_SET:
     case SEM_STAT:
+    case SEM_STAT_ANY:
     case IPC_INFO:      /* arg.__buf */
     case SEM_INFO:
       va_start (ap, cmd);
       arg64 = va_arg (ap, union semun64);
       va_end (ap);
       break;
+    case IPC_RMID:      /* arg ignored.  */
+    case GETNCNT:
+    case GETPID:
+    case GETVAL:
+    case GETZCNT:
+      break;
+    default:
+      __set_errno (EINVAL);
+      return -1;
     }
 
 #if __IPC_TIME64
@@ -238,6 +249,7 @@ semun_to_semun64 (int cmd, union semun semun, struct __semid64_ds *semid64)
       r.array = semun.array;
       break;
     case SEM_STAT:
+    case SEM_STAT_ANY:
     case IPC_STAT:
     case IPC_SET:
       r.buf = semid64;
@@ -267,12 +279,14 @@ __semctl (int semid, int semnum, int cmd, ...)
     case IPC_STAT:      /* arg.buf */
     case IPC_SET:
     case SEM_STAT:
+    case SEM_STAT_ANY:
     case IPC_INFO:      /* arg.__buf */
     case SEM_INFO:
       va_start (ap, cmd);
       arg = va_arg (ap, union semun);
       va_end (ap);
       break;
+    /* __semctl64 handles non-supported commands.  */
     }
 
   struct __semid64_ds semid64;
@@ -321,6 +335,7 @@ __semctl_mode16 (int semid, int semnum, int cmd, ...)
     case IPC_STAT:      /* arg.buf */
     case IPC_SET:
     case SEM_STAT:
+    case SEM_STAT_ANY:
     case IPC_INFO:      /* arg.__buf */
     case SEM_INFO:
       va_start (ap, cmd);
@@ -354,6 +369,7 @@ __old_semctl (int semid, int semnum, int cmd, ...)
     case IPC_STAT:      /* arg.buf */
     case IPC_SET:
     case SEM_STAT:
+    case SEM_STAT_ANY:
     case IPC_INFO:      /* arg.__buf */
     case SEM_INFO:
       va_start (ap, cmd);

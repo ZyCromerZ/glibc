@@ -1,5 +1,5 @@
 /* pthread_mutex_lock.  Hurd version.
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -33,7 +33,7 @@ __pthread_mutex_lock (pthread_mutex_t *mtxp)
   switch (MTX_TYPE (mtxp))
     {
     case PT_MTX_NORMAL:
-      lll_lock (&mtxp->__lock, flags);
+      lll_lock (mtxp->__lock, flags);
       break;
 
     case PT_MTX_RECURSIVE:
@@ -47,7 +47,7 @@ __pthread_mutex_lock (pthread_mutex_t *mtxp)
 	  return ret;
 	}
 
-      lll_lock (&mtxp->__lock, flags);
+      lll_lock (mtxp->__lock, flags);
       mtx_set_owner (mtxp, self, flags);
       mtxp->__cnt = 1;
       break;
@@ -57,7 +57,7 @@ __pthread_mutex_lock (pthread_mutex_t *mtxp)
       if (mtx_owned_p (mtxp, self, flags))
 	return EDEADLK;
 
-      lll_lock (&mtxp->__lock, flags);
+      lll_lock (mtxp->__lock, flags);
       mtx_set_owner (mtxp, self, flags);
       break;
 
@@ -65,7 +65,7 @@ __pthread_mutex_lock (pthread_mutex_t *mtxp)
     case PT_MTX_RECURSIVE | PTHREAD_MUTEX_ROBUST:
     case PT_MTX_ERRORCHECK | PTHREAD_MUTEX_ROBUST:
       self = _pthread_self ();
-      ROBUST_LOCK (self, mtxp, __lll_robust_lock, flags);
+      ROBUST_LOCK (self, mtxp, lll_robust_lock, flags);
       break;
 
     default:

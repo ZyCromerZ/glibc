@@ -1,5 +1,5 @@
 /* Machine-dependent signal context structure for GNU Hurd.  i386 version.
-   Copyright (C) 1991-2020 Free Software Foundation, Inc.
+   Copyright (C) 1991-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -96,6 +96,10 @@ struct sigcontext
 #define sc_pc	sc_eip		/* Process counter.  */
 #define sc_ps	sc_efl
 
+
+/* The deprecated sigcode values below are passed as an extra, non-portable
+   argument to regular signal handlers.  You should use SA_SIGINFO handlers
+   instead, which use the standard POSIX signal codes.  */
 
 /* Codes for SIGFPE.  */
 #define FPE_INTOVF_TRAP		0x1 /* integer overflow */

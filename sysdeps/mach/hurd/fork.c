@@ -1,4 +1,4 @@
-/* Copyright (C) 1994-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1994-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -28,6 +28,7 @@
 #include "hurdmalloc.h"		/* XXX */
 #include <tls.h>
 #include <malloc/malloc-internal.h>
+#include <nss/nss_database.h>
 
 #undef __fork
 
@@ -68,6 +69,7 @@ __fork (void)
   size_t i;
   error_t err;
   struct hurd_sigstate *volatile ss;
+  struct nss_database_data nss_database_data;
 
   RUN_HOOK (_hurd_atfork_prepare_hook, ());
 
@@ -108,6 +110,9 @@ __fork (void)
 
       /* Run things that prepare for forking before we create the task.  */
       RUN_HOOK (_hurd_fork_prepare_hook, ());
+
+      call_function_static_weak (__nss_database_fork_prepare_parent,
+				 &nss_database_data);
 
       /* Lock things that want to be locked before we fork.  */
       {
@@ -497,7 +502,7 @@ __fork (void)
 #else
       if (__hurd_sigthread_stack_end == 0)
 	{
-	  /* The signal thread has a stack assigned by cthreads.
+	  /* The signal thread has a stack assigned by pthread.
 	     The threadvar_stack variables conveniently tell us how
 	     to get to the highest address in the stack, just below
 	     the per-thread variables.  */
@@ -665,6 +670,9 @@ __fork (void)
       /* Release malloc locks.  */
       _hurd_malloc_fork_child ();
       call_function_static_weak (__malloc_fork_unlock_child);
+
+      call_function_static_weak (__nss_database_fork_subprocess,
+				 &nss_database_data);
 
       /* Run things that want to run in the child task to set up.  */
       RUN_HOOK (_hurd_fork_child_hook, ());

@@ -1,5 +1,5 @@
 /* Machine-dependent ELF dynamic relocation inline functions.  RISC-V version.
-   Copyright (C) 2011-2020 Free Software Foundation, Inc.
+   Copyright (C) 2011-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -25,6 +25,7 @@
 #include <elf/elf.h>
 #include <sys/asm.h>
 #include <dl-tls.h>
+#include <dl-irel.h>
 
 #ifndef _RTLD_PROLOGUE
 # define _RTLD_PROLOGUE(entry)						\
@@ -105,6 +106,7 @@ elf_machine_load_address (void)
 	" _RTLD_PROLOGUE (ENTRY_POINT) "\
 	mv a0, sp\n\
 	jal _dl_start\n\
+	" _RTLD_PROLOGUE (_dl_start_user) "\
 	# Stash user entry point in s0.\n\
 	mv s0, a0\n\
 	# See if we were run as a command with the executable file\n\
@@ -131,7 +133,8 @@ elf_machine_load_address (void)
 	lla a0, _dl_fini\n\
 	# Jump to the user entry point.\n\
 	jr s0\n\
-	" _RTLD_EPILOGUE (ENTRY_POINT) "\
+	" _RTLD_EPILOGUE (ENTRY_POINT) \
+	  _RTLD_EPILOGUE (_dl_start_user) "\
 	.previous" \
 );
 
@@ -173,6 +176,13 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
   ElfW(Addr) value = 0;
   if (sym_map != NULL)
     value = SYMBOL_ADDRESS (sym_map, sym, true) + reloc->r_addend;
+
+  if (sym != NULL
+      && __glibc_unlikely (ELFW(ST_TYPE) (sym->st_info) == STT_GNU_IFUNC)
+      && __glibc_likely (sym->st_shndx != SHN_UNDEF)
+      && __glibc_likely (!skip_ifunc))
+    value = elf_ifunc_invoke (value);
+
 
   switch (r_type)
     {
@@ -249,6 +259,13 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
     }
 #endif
 
+    case R_RISCV_IRELATIVE:
+      value = map->l_addr + reloc->r_addend;
+      if (__glibc_likely (!skip_ifunc))
+        value = elf_ifunc_invoke (value);
+      *addr_field = value;
+      break;
+
     case R_RISCV_JUMP_SLOT:
     case __WORDSIZE == 64 ? R_RISCV_64 : R_RISCV_32:
       *addr_field = value;
@@ -290,6 +307,13 @@ elf_machine_lazy_rel (struct link_map *map, ElfW(Addr) l_addr,
       else
 	*reloc_addr = map->l_mach.plt;
     }
+  else if (__glibc_unlikely (r_type == R_RISCV_IRELATIVE))
+    {
+      ElfW(Addr) value = map->l_addr + reloc->r_addend;
+      if (__glibc_likely (!skip_ifunc))
+        value = elf_ifunc_invoke (value);
+      *reloc_addr = value;
+    }
   else
     _dl_reloc_bad_type (map, r_type, 1);
 }
@@ -315,8 +339,28 @@ elf_machine_runtime_setup (struct link_map *l, int lazy, int profile)
       gotplt[0] = (ElfW(Addr)) &_dl_runtime_resolve;
       gotplt[1] = (ElfW(Addr)) l;
     }
-#endif
 
+  if (l->l_type == lt_executable)
+    {
+      /* The __global_pointer$ may not be defined by the linker if the
+	 $gp register does not be used to access the global variable
+	 in the executable program. Therefore, the search symbol is
+	 set to a weak symbol to avoid we error out if the
+	 __global_pointer$ is not found.  */
+      ElfW(Sym) gp_sym = { 0 };
+      gp_sym.st_info = (unsigned char) ELFW (ST_INFO (STB_WEAK, STT_NOTYPE));
+
+      const ElfW(Sym) *ref = &gp_sym;
+      _dl_lookup_symbol_x ("__global_pointer$", l, &ref,
+			   l->l_scope, NULL, 0, 0, NULL);
+      if (ref)
+        asm (
+          "mv gp, %0\n"
+          :
+          : "r" (ref->st_value)
+        );
+    }
+#endif
   return lazy;
 }
 

@@ -1,5 +1,5 @@
 /* Detach a thread.
-   Copyright (C) 2000-2020 Free Software Foundation, Inc.
+   Copyright (C) 2000-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -78,3 +78,4 @@ __pthread_detach (pthread_t thread)
   return err;
 }
 weak_alias (__pthread_detach, pthread_detach)
+hidden_def (__pthread_detach)

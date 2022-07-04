@@ -1,4 +1,4 @@
-/* Copyright (C) 1991-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1991-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -31,6 +31,10 @@ RAWMEMCHR (const void *s, int c)
   /* GCC 8 warns about the size passed to memchr being larger than
      PTRDIFF_MAX; the use of SIZE_MAX is deliberate here.  */
   DIAG_IGNORE_NEEDS_COMMENT (8, "-Wstringop-overflow=");
+#endif
+#if __GNUC_PREREQ (11, 0)
+  /* Likewise GCC 11, with a different warning option.  */
+  DIAG_IGNORE_NEEDS_COMMENT (11, "-Wstringop-overread");
 #endif
   if (c != '\0')
     return memchr (s, c, (size_t)-1);

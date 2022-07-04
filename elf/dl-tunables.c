@@ -1,7 +1,7 @@
 /* The tunable framework.  See the README.tunables to know how to use the
    tunable in a glibc module.
 
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -18,6 +18,10 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
+/* Mark symbols hidden in static PIE for early self relocation to work.  */
+#if BUILD_PIE_DEFAULT
+# pragma GCC visibility push(hidden)
+#endif
 #include <startup.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -26,6 +30,7 @@
 #include <sysdep.h>
 #include <fcntl.h>
 #include <ldsodefs.h>
+#include <array_length.h>
 
 #define TUNABLES_INTERNAL 1
 #include "dl-tunables.h"
@@ -100,8 +105,42 @@ get_next_env (char **envp, char **name, size_t *namelen, char **val,
     }									      \
 })
 
+#define TUNABLE_SET_BOUNDS_IF_VALID(__cur, __minp, __maxp, __type)	      \
+({									      \
+  if (__minp != NULL)							      \
+    {									      \
+      /* MIN is specified.  */						      \
+      __type min = *((__type *) __minp);				      \
+      if (__maxp != NULL)						      \
+	{								      \
+	   /* Both MIN and MAX are specified.  */			      \
+	    __type max = *((__type *) __maxp);				      \
+	  if (max >= min						      \
+	      && max <= (__cur)->type.max				      \
+	      && min >= (__cur)->type.min)				      \
+	    {								      \
+	      (__cur)->type.min = min;					      \
+	      (__cur)->type.max = max;					      \
+	    }								      \
+	}								      \
+      else if (min > (__cur)->type.min && min <= (__cur)->type.max)	      \
+	{								      \
+	  /* Only MIN is specified.  */					      \
+	  (__cur)->type.min = min;					      \
+	}								      \
+    }									      \
+  else if (__maxp != NULL)						      \
+    {									      \
+      /* Only MAX is specified.  */					      \
+      __type max = *((__type *) __maxp);				      \
+      if (max < (__cur)->type.max && max >= (__cur)->type.min)		      \
+	(__cur)->type.max = max;					      \
+    }									      \
+})
+
 static void
-do_tunable_update_val (tunable_t *cur, const void *valp)
+do_tunable_update_val (tunable_t *cur, const void *valp,
+		       const void *minp, const void *maxp)
 {
   uint64_t val;
 
@@ -112,16 +151,19 @@ do_tunable_update_val (tunable_t *cur, const void *valp)
     {
     case TUNABLE_TYPE_INT_32:
 	{
+	  TUNABLE_SET_BOUNDS_IF_VALID (cur, minp, maxp, int64_t);
 	  TUNABLE_SET_VAL_IF_VALID_RANGE (cur, val, int64_t);
 	  break;
 	}
     case TUNABLE_TYPE_UINT_64:
 	{
+	  TUNABLE_SET_BOUNDS_IF_VALID (cur, minp, maxp, uint64_t);
 	  TUNABLE_SET_VAL_IF_VALID_RANGE (cur, val, uint64_t);
 	  break;
 	}
     case TUNABLE_TYPE_SIZE_T:
 	{
+	  TUNABLE_SET_BOUNDS_IF_VALID (cur, minp, maxp, uint64_t);
 	  TUNABLE_SET_VAL_IF_VALID_RANGE (cur, val, uint64_t);
 	  break;
 	}
@@ -153,15 +195,15 @@ tunable_initialize (tunable_t *cur, const char *strval)
       cur->initialized = true;
       valp = strval;
     }
-  do_tunable_update_val (cur, valp);
+  do_tunable_update_val (cur, valp, NULL, NULL);
 }
 
 void
-__tunable_set_val (tunable_id_t id, void *valp)
+__tunable_set_val (tunable_id_t id, void *valp, void *minp, void *maxp)
 {
   tunable_t *cur = &tunable_list[id];
 
-  do_tunable_update_val (cur, valp);
+  do_tunable_update_val (cur, valp, minp, maxp);
 }
 
 #if TUNABLES_FRONTEND == TUNABLES_FRONTEND_valstring
@@ -313,7 +355,7 @@ __tunables_init (char **envp)
 
 	  /* Skip over tunables that have either been set already or should be
 	     skipped.  */
-	  if (cur->initialized || cur->env_alias == NULL)
+	  if (cur->initialized || cur->env_alias[0] == '\0')
 	    continue;
 
 	  const char *name = cur->env_alias;
@@ -356,6 +398,48 @@ __tunables_init (char **envp)
 
 	      tunable_initialize (cur, envval);
 	      break;
+	    }
+	}
+    }
+}
+
+void
+__tunables_print (void)
+{
+  for (int i = 0; i < array_length (tunable_list); i++)
+    {
+      const tunable_t *cur = &tunable_list[i];
+      if (cur->type.type_code == TUNABLE_TYPE_STRING
+	  && cur->val.strval == NULL)
+	_dl_printf ("%s:\n", cur->name);
+      else
+	{
+	  _dl_printf ("%s: ", cur->name);
+	  switch (cur->type.type_code)
+	    {
+	    case TUNABLE_TYPE_INT_32:
+	      _dl_printf ("%d (min: %d, max: %d)\n",
+			  (int) cur->val.numval,
+			  (int) cur->type.min,
+			  (int) cur->type.max);
+	      break;
+	    case TUNABLE_TYPE_UINT_64:
+	      _dl_printf ("0x%lx (min: 0x%lx, max: 0x%lx)\n",
+			  (long int) cur->val.numval,
+			  (long int) cur->type.min,
+			  (long int) cur->type.max);
+	      break;
+	    case TUNABLE_TYPE_SIZE_T:
+	      _dl_printf ("0x%Zx (min: 0x%Zx, max: 0x%Zx)\n",
+			  (size_t) cur->val.numval,
+			  (size_t) cur->type.min,
+			  (size_t) cur->type.max);
+	      break;
+	    case TUNABLE_TYPE_STRING:
+	      _dl_printf ("%s\n", cur->val.strval);
+	      break;
+	    default:
+	      __builtin_unreachable ();
 	    }
 	}
     }

@@ -1,5 +1,5 @@
 /* memmove/memcpy/mempcpy with unaligned load/store and rep movsb
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -54,6 +54,13 @@
 # else
 #  define VZEROUPPER
 # endif
+#endif
+
+/* Avoid short distance rep movsb only with non-SSE vector.  */
+#ifndef AVOID_SHORT_DISTANCE_REP_MOVSB
+# define AVOID_SHORT_DISTANCE_REP_MOVSB (VEC_SIZE > 16)
+#else
+# define AVOID_SHORT_DISTANCE_REP_MOVSB 0
 #endif
 
 #ifndef PREFETCH
@@ -243,7 +250,21 @@ L(movsb):
 	cmpq	%r9, %rdi
 	/* Avoid slow backward REP MOVSB.  */
 	jb	L(more_8x_vec_backward)
+# if AVOID_SHORT_DISTANCE_REP_MOVSB
+	movq	%rdi, %rcx
+	subq	%rsi, %rcx
+	jmp	2f
+# endif
 1:
+# if AVOID_SHORT_DISTANCE_REP_MOVSB
+	movq	%rsi, %rcx
+	subq	%rdi, %rcx
+2:
+/* Avoid "rep movsb" if RCX, the distance between source and destination,
+   is N*4GB + [1..63] with N >= 0.  */
+	cmpl	$63, %ecx
+	jbe	L(more_2x_vec)	/* Avoid "rep movsb" if ECX <= 63.  */
+# endif
 	mov	%RDX_LP, %RCX_LP
 	rep movsb
 L(nop):

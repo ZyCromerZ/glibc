@@ -1,7 +1,7 @@
 #!/bin/bash
 # Test for some known iconv(1) hangs from bug 19519, and miscellaneous
 # iconv(1) program error conditions.
-# Copyright (C) 2020 Free Software Foundation, Inc.
+# Copyright (C) 2020-2021 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 
 # The GNU C Library is free software; you can redistribute it and/or
@@ -102,12 +102,16 @@ hangarray=(
 "\x00\x80;-c;IBM1161;UTF-8//TRANSLIT//IGNORE"
 "\x00\xdb;-c;IBM1162;UTF-8//TRANSLIT//IGNORE"
 "\x00\x70;-c;IBM12712;UTF-8//TRANSLIT//IGNORE"
-# These are known hangs that are yet to be fixed:
-# "\x00\x0f;-c;IBM1364;UTF-8"
-# "\x00\x0f;-c;IBM1371;UTF-8"
-# "\x00\x0f;-c;IBM1388;UTF-8"
-# "\x00\x0f;-c;IBM1390;UTF-8"
-# "\x00\x0f;-c;IBM1399;UTF-8"
+"\x00\x0f;-c;IBM1364;UTF-8"
+"\x0e\x0e;-c;IBM1364;UTF-8"
+"\x00\x0f;-c;IBM1371;UTF-8"
+"\x0e\x0e;-c;IBM1371;UTF-8"
+"\x00\x0f;-c;IBM1388;UTF-8"
+"\x0e\x0e;-c;IBM1388;UTF-8"
+"\x00\x0f;-c;IBM1390;UTF-8"
+"\x0e\x0e;-c;IBM1390;UTF-8"
+"\x00\x0f;-c;IBM1399;UTF-8"
+"\x0e\x0e;-c;IBM1399;UTF-8"
 "\x00\x53;-c;IBM16804;UTF-8//TRANSLIT//IGNORE"
 "\x00\x41;-c;IBM274;UTF-8//TRANSLIT//IGNORE"
 "\x00\x41;-c;IBM275;UTF-8//TRANSLIT//IGNORE"

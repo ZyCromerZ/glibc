@@ -1,7 +1,7 @@
 /* The tunable framework.  See the README to know how to use the tunable in
    a glibc module.
 
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -21,8 +21,6 @@
 #ifndef _TUNABLES_H_
 #define _TUNABLES_H_
 
-#include <stdbool.h>
-
 #if !HAVE_TUNABLES
 static inline void
 __always_inline
@@ -31,34 +29,17 @@ __tunables_init (char **unused __attribute__ ((unused)))
   /* This is optimized out if tunables are not enabled.  */
 }
 #else
-
+# include <stdbool.h>
 # include <stddef.h>
-# include "dl-tunable-types.h"
+# include <stdint.h>
 
-/* A tunable.  */
-struct _tunable
+typedef union
 {
-  const char *name;			/* Internal name of the tunable.  */
-  tunable_type_t type;			/* Data type of the tunable.  */
-  tunable_val_t val;			/* The value.  */
-  bool initialized;			/* Flag to indicate that the tunable is
-					   initialized.  */
-  tunable_seclevel_t security_level;	/* Specify the security level for the
-					   tunable with respect to AT_SECURE
-					   programs.  See description of
-					   tunable_seclevel_t to see a
-					   description of the values.
+  int64_t numval;
+  const char *strval;
+} tunable_val_t;
 
-					   Note that even if the tunable is
-					   read, it may not get used by the
-					   target module if the value is
-					   considered unsafe.  */
-  /* Compatibility elements.  */
-  const char *env_alias;		/* The compatibility environment
-					   variable name.  */
-};
-
-typedef struct _tunable tunable_t;
+typedef void (*tunable_callback_t) (tunable_val_t *);
 
 /* Full name for a tunable is top_ns.tunable_ns.id.  */
 # define TUNABLE_NAME_S(top,ns,id) #top "." #ns "." #id
@@ -69,10 +50,13 @@ typedef struct _tunable tunable_t;
 # include "dl-tunable-list.h"
 
 extern void __tunables_init (char **);
+extern void __tunables_print (void);
 extern void __tunable_get_val (tunable_id_t, void *, tunable_callback_t);
-extern void __tunable_set_val (tunable_id_t, void *);
+extern void __tunable_set_val (tunable_id_t, void *, void *, void *);
 rtld_hidden_proto (__tunables_init)
+rtld_hidden_proto (__tunables_print)
 rtld_hidden_proto (__tunable_get_val)
+rtld_hidden_proto (__tunable_set_val)
 
 /* Define TUNABLE_GET and TUNABLE_SET in short form if TOP_NAMESPACE and
    TUNABLE_NAMESPACE are defined.  This is useful shorthand to get and set
@@ -82,11 +66,18 @@ rtld_hidden_proto (__tunable_get_val)
   TUNABLE_GET_FULL (TOP_NAMESPACE, TUNABLE_NAMESPACE, __id, __type, __cb)
 # define TUNABLE_SET(__id, __type, __val) \
   TUNABLE_SET_FULL (TOP_NAMESPACE, TUNABLE_NAMESPACE, __id, __type, __val)
+# define TUNABLE_SET_WITH_BOUNDS(__id, __type, __val, __min, __max) \
+  TUNABLE_SET_WITH_BOUNDS_FULL (TOP_NAMESPACE, TUNABLE_NAMESPACE, __id, \
+				__type, __val, __min, __max)
 #else
 # define TUNABLE_GET(__top, __ns, __id, __type, __cb) \
   TUNABLE_GET_FULL (__top, __ns, __id, __type, __cb)
 # define TUNABLE_SET(__top, __ns, __id, __type, __val) \
   TUNABLE_SET_FULL (__top, __ns, __id, __type, __val)
+# define TUNABLE_SET_WITH_BOUNDS(__top, __ns, __id, __type, __val, \
+				 __min, __max) \
+  TUNABLE_SET_WITH_BOUNDS_FULL (__top, __ns, __id, __type, __val, \
+				__min, __max)
 #endif
 
 /* Get and return a tunable value.  If the tunable was set externally and __CB
@@ -103,7 +94,16 @@ rtld_hidden_proto (__tunable_get_val)
 # define TUNABLE_SET_FULL(__top, __ns, __id, __type, __val) \
 ({									      \
   __tunable_set_val (TUNABLE_ENUM_NAME (__top, __ns, __id),		      \
-			& (__type) {__val});				      \
+		     & (__type) {__val}, NULL, NULL);			      \
+})
+
+/* Set a tunable value together with min/max values.  */
+# define TUNABLE_SET_WITH_BOUNDS_FULL(__top, __ns, __id, __type, __val,	      \
+				      __min, __max)			      \
+({									      \
+  __tunable_set_val (TUNABLE_ENUM_NAME (__top, __ns, __id),		      \
+		     & (__type) {__val},  & (__type) {__min},		      \
+		     & (__type) {__max});				      \
 })
 
 /* Namespace sanity for callback functions.  Use this macro to keep the

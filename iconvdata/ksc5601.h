@@ -1,5 +1,5 @@
 /* Access functions for KS C 5601-1992 based encoding conversion.
-   Copyright (C) 1998-2020 Free Software Foundation, Inc.
+   Copyright (C) 1998-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -50,14 +50,14 @@ ksc5601_to_ucs4 (const unsigned char **s, size_t avail, unsigned char offset)
   unsigned char ch2;
   int idx;
 
+  if (avail < 2)
+    return 0;
+
   /* row 94(0x7e) and row 41(0x49) are user-defined area in KS C 5601 */
 
   if (ch < offset || (ch - offset) <= 0x20 || (ch - offset) >= 0x7e
       || (ch - offset) == 0x49)
     return __UNKNOWN_10646_CHAR;
-
-  if (avail < 2)
-    return 0;
 
   ch2 = (*s)[1];
   if (ch2 < offset || (ch2 - offset) <= 0x20 || (ch2 - offset) >= 0x7f)

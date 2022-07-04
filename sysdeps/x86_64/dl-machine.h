@@ -1,5 +1,5 @@
 /* Machine-dependent ELF dynamic relocation inline functions.  x86-64 version.
-   Copyright (C) 2001-2020 Free Software Foundation, Inc.
+   Copyright (C) 2001-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
    Contributed by Andreas Jaeger <aj@suse.de>.
 
@@ -26,7 +26,6 @@
 #include <sysdep.h>
 #include <tls.h>
 #include <dl-tlsdesc.h>
-#include <cpu-features.c>
 
 /* Return nonzero iff ELF header is compatible with the running host.  */
 static inline int __attribute__ ((unused))
@@ -223,9 +222,9 @@ static inline void __attribute__ ((unused))
 dl_platform_init (void)
 {
 #if IS_IN (rtld)
-  /* init_cpu_features has been called early from __libc_start_main in
-     static executable.  */
-  init_cpu_features (&GLRO(dl_x86_cpu_features));
+  /* _dl_x86_init_cpu_features is a wrapper for init_cpu_features which
+     has been called early from __libc_start_main in static executable.  */
+  _dl_x86_init_cpu_features ();
 #else
   if (GLRO(dl_platform) != NULL && *GLRO(dl_platform) == '\0')
     /* Avoid an empty string which would disturb us.  */
@@ -315,16 +314,22 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
 	{
 # ifndef RTLD_BOOTSTRAP
 	  if (sym_map != map
-	      && sym_map->l_type != lt_executable
 	      && !sym_map->l_relocated)
 	    {
 	      const char *strtab
 		= (const char *) D_PTR (map, l_info[DT_STRTAB]);
-	      _dl_error_printf ("\
+	      if (sym_map->l_type == lt_executable)
+		_dl_fatal_printf ("\
+%s: IFUNC symbol '%s' referenced in '%s' is defined in the executable \
+and creates an unsatisfiable circular dependency.\n",
+				  RTLD_PROGNAME, strtab + refsym->st_name,
+				  map->l_name);
+	      else
+		_dl_error_printf ("\
 %s: Relink `%s' with `%s' for IFUNC symbol `%s'\n",
-				RTLD_PROGNAME, map->l_name,
-				sym_map->l_name,
-				strtab + refsym->st_name);
+				  RTLD_PROGNAME, map->l_name,
+				  sym_map->l_name,
+				  strtab + refsym->st_name);
 	    }
 # endif
 	  value = ((ElfW(Addr) (*) (void)) value) ();

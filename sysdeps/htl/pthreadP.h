@@ -1,5 +1,5 @@
 /* Declarations of internal pthread functions used by libc.  Hurd version.
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -97,6 +97,8 @@ int __pthread_attr_getstack (const pthread_attr_t *, void **, size_t *);
 void __pthread_testcancel (void);
 
 #if IS_IN (libpthread)
+hidden_proto (__pthread_create)
+hidden_proto (__pthread_detach)
 hidden_proto (__pthread_key_create)
 hidden_proto (__pthread_getspecific)
 hidden_proto (__pthread_setspecific)

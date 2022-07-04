@@ -1,5 +1,5 @@
 /* Non-portable functions. Generic version.
-   Copyright (C) 2008-2020 Free Software Foundation, Inc.
+   Copyright (C) 2008-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -17,7 +17,7 @@
    <https://www.gnu.org/licenses/>.  */
 
 /*
- * Never include this file directly; use <pthread.h> or <cthreads.h> instead.
+ * Never include this file directly; use <pthread.h> instead.
  */
 
 #ifndef _BITS_PTHREAD_NP_H

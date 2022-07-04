@@ -1,5 +1,5 @@
 /* pthread_mutex_timedlock.  Hurd version.
-   Copyright (C) 2016-2020 Free Software Foundation, Inc.
+   Copyright (C) 2016-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -34,7 +34,7 @@ __pthread_mutex_clocklock (pthread_mutex_t *mtxp,
   switch (MTX_TYPE (mtxp))
     {
     case PT_MTX_NORMAL:
-      ret = lll_abstimed_lock (&mtxp->__lock, tsp, flags, clockid);
+      ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid);
       break;
 
     case PT_MTX_RECURSIVE:
@@ -47,7 +47,7 @@ __pthread_mutex_clocklock (pthread_mutex_t *mtxp,
 	  ++mtxp->__cnt;
 	  ret = 0;
 	}
-      else if ((ret = lll_abstimed_lock (&mtxp->__lock, tsp, flags, clockid)) == 0)
+      else if ((ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid)) == 0)
 	{
 	  mtx_set_owner (mtxp, self, flags);
 	  mtxp->__cnt = 1;
@@ -59,7 +59,7 @@ __pthread_mutex_clocklock (pthread_mutex_t *mtxp,
       self = _pthread_self ();
       if (mtx_owned_p (mtxp, self, flags))
 	ret = EDEADLK;
-      else if ((ret = lll_abstimed_lock (&mtxp->__lock, tsp, flags, clockid)) == 0)
+      else if ((ret = lll_abstimed_lock (mtxp->__lock, tsp, flags, clockid)) == 0)
 	mtx_set_owner (mtxp, self, flags);
 
       break;

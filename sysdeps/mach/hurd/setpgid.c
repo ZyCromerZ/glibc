@@ -1,4 +1,4 @@
-/* Copyright (C) 1993-2020 Free Software Foundation, Inc.
+/* Copyright (C) 1993-2021 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -39,7 +39,7 @@ __setpgid (pid_t pid, pid_t pgid)
     /* Synchronize with the signal thread to make sure we have
        received and processed proc_newids before returning to the user.  */
     while (_hurd_pids_changed_stamp == stamp)
-      lll_wait (&_hurd_pids_changed_stamp, stamp, 0);
+      lll_wait (_hurd_pids_changed_stamp, stamp, 0);
 
   return 0;
 

@@ -1,4 +1,4 @@
-# Copyright (C) 1994-2020 Free Software Foundation, Inc.
+# Copyright (C) 1994-2021 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 
 # The GNU C Library is free software; you can redistribute it and/or
@@ -32,7 +32,7 @@ routines := herror inet_addr inet_ntop inet_pton nsap_addr res_init \
 	    resolv_context resolv_conf
 
 tests = tst-aton tst-leaks tst-inet_ntop
-xtests = tst-leaks2
+tests-container = tst-leaks2
 
 tests-internal += tst-inet_aton_exact
 
@@ -60,6 +60,11 @@ tests += \
   tst-resolv-res_init-multi \
   tst-resolv-search \
   tst-resolv-trailing \
+
+# This test calls __res_context_send directly, which is not exported
+# from libresolv.
+tests-internal += tst-resolv-txnid-collision
+tests-static += tst-resolv-txnid-collision
 
 # These tests need libdl.
 ifeq (yes,$(build-shared))
@@ -120,9 +125,8 @@ endif
 
 ifeq ($(run-built-tests),yes)
 ifneq (no,$(PERL))
-tests-special += $(objpfx)mtrace-tst-leaks.out
-xtests-special += $(objpfx)mtrace-tst-leaks2.out
-tests-special += $(objpfx)mtrace-tst-resolv-res_ninit.out
+tests-special += $(objpfx)mtrace-tst-leaks.out $(objpfx)mtrace-tst-leaks2.out \
+		 $(objpfx)mtrace-tst-resolv-res_ninit.out
 endif
 endif
 
@@ -154,7 +158,9 @@ $(objpfx)mtrace-tst-leaks.out: $(objpfx)tst-leaks.out
 
 tst-leaks2-ENV = MALLOC_TRACE=$(objpfx)tst-leaks2.mtrace
 $(objpfx)mtrace-tst-leaks2.out: $(objpfx)tst-leaks2.out
-	$(common-objpfx)malloc/mtrace $(objpfx)tst-leaks2.mtrace > $@; \
+	{ test -r $(objpfx)tst-leaks2.mtrace \
+	|| ( echo "tst-leaks2.mtrace does not exist"; exit 77; ) \
+	&& $(common-objpfx)malloc/mtrace $(objpfx)tst-leaks2.mtrace; } > $@; \
 	$(evaluate-test)
 
 tst-resolv-res_ninit-ENV = MALLOC_TRACE=$(objpfx)tst-resolv-res_ninit.mtrace
@@ -191,6 +197,8 @@ $(objpfx)tst-resolv-search: $(objpfx)libresolv.so $(shared-thread-library)
 $(objpfx)tst-resolv-trailing: $(objpfx)libresolv.so $(shared-thread-library)
 $(objpfx)tst-resolv-threads: \
   $(libdl) $(objpfx)libresolv.so $(shared-thread-library)
+$(objpfx)tst-resolv-txnid-collision: $(objpfx)libresolv.a \
+  $(static-thread-library)
 $(objpfx)tst-resolv-canonname: \
   $(libdl) $(objpfx)libresolv.so $(shared-thread-library)
 $(objpfx)tst-resolv-trustad: $(objpfx)libresolv.so $(shared-thread-library)
