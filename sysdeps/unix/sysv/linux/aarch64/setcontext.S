@@ -34,7 +34,7 @@
 	.text
 
 ENTRY (__setcontext)
-	PTR_ARG (0)
+	DELOUSE (0)
 	/* Save a copy of UCP.  */
 	mov	x9, x0
 
