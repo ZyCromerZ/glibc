@@ -47,6 +47,7 @@
 #define __NR_epoll_create1 357
 #define __NR_epoll_ctl 251
 #define __NR_epoll_pwait 346
+#define __NR_epoll_pwait2 441
 #define __NR_epoll_wait 252
 #define __NR_eventfd 351
 #define __NR_eventfd2 356
@@ -148,6 +149,9 @@
 #define __NR_kexec_load 347
 #define __NR_keyctl 311
 #define __NR_kill 37
+#define __NR_landlock_add_rule 445
+#define __NR_landlock_create_ruleset 444
+#define __NR_landlock_restrict_self 446
 #define __NR_lchown 16
 #define __NR_lchown32 198
 #define __NR_lgetxattr 230
@@ -177,6 +181,7 @@
 #define __NR_mlockall 152
 #define __NR_mmap2 192
 #define __NR_mount 21
+#define __NR_mount_setattr 442
 #define __NR_move_mount 429
 #define __NR_move_pages 344
 #define __NR_mprotect 125

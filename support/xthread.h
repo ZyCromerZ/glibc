@@ -66,6 +66,11 @@ void *xpthread_join (pthread_t thr);
 void xpthread_once (pthread_once_t *guard, void (*func) (void));
 void xpthread_attr_destroy (pthread_attr_t *attr);
 void xpthread_attr_init (pthread_attr_t *attr);
+#ifdef __linux__
+void xpthread_attr_setaffinity_np (pthread_attr_t *attr,
+				   size_t cpusetsize,
+				   const cpu_set_t *cpuset);
+#endif
 void xpthread_attr_setdetachstate (pthread_attr_t *attr,
 				   int detachstate);
 void xpthread_attr_setstack (pthread_attr_t *attr, void *stackaddr,
@@ -74,6 +79,8 @@ void xpthread_attr_setstacksize (pthread_attr_t *attr,
 				 size_t stacksize);
 void xpthread_attr_setguardsize (pthread_attr_t *attr,
 				 size_t guardsize);
+
+void xpthread_kill (pthread_t thr, int signo);
 
 /* Return the stack size used on support_set_small_thread_stack_size.  */
 size_t support_small_thread_stack_size (void);

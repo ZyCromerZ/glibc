@@ -46,6 +46,7 @@ static struct cpu_list cpu_list[] = {
       {"ares",		 0x411FD0C0},
       {"emag",		 0x503F0001},
       {"kunpeng920", 	 0x481FD010},
+      {"a64fx",		 0x460F0010},
       {"generic", 	 0x0}
 };
 
@@ -104,7 +105,7 @@ init_cpu_features (struct cpu_features *cpu_features)
   cpu_features->mte_state = (GLRO (dl_hwcap2) & HWCAP2_MTE) ? mte_state : 0;
   /* If we lack the MTE feature, disable the tunable, since it will
      otherwise cause instructions that won't run on this CPU to be used.  */
-  TUNABLE_SET (glibc, mem, tagging, unsigned, cpu_features->mte_state);
+  TUNABLE_SET (glibc, mem, tagging, cpu_features->mte_state);
 # endif
 
   if (cpu_features->mte_state & 2)
@@ -116,4 +117,7 @@ init_cpu_features (struct cpu_features *cpu_features)
 	     (PR_TAGGED_ADDR_ENABLE | PR_MTE_TCF_ASYNC | MTE_ALLOWED_TAGS),
 	     0, 0, 0);
 #endif
+
+  /* Check if SVE is supported.  */
+  cpu_features->sve = GLRO (dl_hwcap) & HWCAP_SVE;
 }

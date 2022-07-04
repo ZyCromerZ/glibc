@@ -58,7 +58,6 @@
 
 #define debug(msg)		/*printf("svcauth_des: %s\n", msg) */
 
-#define USEC_PER_SEC ((uint32_t) 1000000L)
 #define BEFORE(t1, t2) timercmp(t1, t2, <)
 
 /*
@@ -94,7 +93,7 @@ struct
     u_long ncachereplays;	/* times cache hit, and is replay */
     u_long ncachemisses;	/* times cache missed */
   }
-svcauthdes_stats __attribute__ ((nocommon));
+svcauthdes_stats;
 #ifdef SHARED
 compat_symbol (libc, svcauthdes_stats, svcauthdes_stats, GLIBC_2_0);
 #endif

@@ -48,7 +48,6 @@
 #include <array_length.h>
 #include <libc-early-init.h>
 #include <dl-main.h>
-#include <list.h>
 #include <gnu/lib-names.h>
 #include <dl-tunables.h>
 
@@ -141,6 +140,7 @@ static void dl_main_state_init (struct dl_main_state *state);
 /* Process all environments variables the dynamic linker must recognize.
    Since all of them start with `LD_' we are a bit smarter while finding
    all the entries.  */
+extern char **_environ attribute_hidden;
 static void process_envvars (struct dl_main_state *state);
 
 #ifdef DL_ARGV_NOT_RELRO
@@ -163,8 +163,7 @@ uintptr_t __stack_chk_guard attribute_relro;
 
 /* Only exported for architectures that don't store the pointer guard
    value in thread local area.  */
-uintptr_t __pointer_chk_guard_local
-     attribute_relro attribute_hidden __attribute__ ((nocommon));
+uintptr_t __pointer_chk_guard_local attribute_relro attribute_hidden;
 #ifndef THREAD_SET_POINTER_GUARD
 strong_alias (__pointer_chk_guard_local, __pointer_chk_guard)
 #endif
@@ -367,6 +366,8 @@ struct rtld_global_ro _rtld_global_ro attribute_relro =
     ._dl_lookup_symbol_x = _dl_lookup_symbol_x,
     ._dl_open = _dl_open,
     ._dl_close = _dl_close,
+    ._dl_catch_error = _rtld_catch_error,
+    ._dl_error_free = _dl_error_free,
     ._dl_tls_get_addr_soft = _dl_tls_get_addr_soft,
 #ifdef HAVE_DL_DISCOVER_OSVERSION
     ._dl_discover_osversion = _dl_discover_osversion
@@ -804,9 +805,7 @@ cannot allocate TLS data structures for initial thread\n");
   const char *lossage = TLS_INIT_TP (tcbp);
   if (__glibc_unlikely (lossage != NULL))
     _dl_fatal_printf ("cannot set up thread-local storage: %s\n", lossage);
-#if THREAD_GSCOPE_IN_TCB
-  list_add (&THREAD_SELF->list, &GL (dl_stack_user));
-#endif
+  __tls_init_tp ();
   tls_init_tp_called = true;
 
   return tcbp;
@@ -842,22 +841,6 @@ ERROR: ld.so: object '%s' from %s cannot be preloaded (%s): ignored.\n",
   /* Nothing loaded.  */
   return 0;
 }
-
-#if defined SHARED && defined _LIBC_REENTRANT \
-    && defined __rtld_lock_default_lock_recursive
-static void
-rtld_lock_default_lock_recursive (void *lock)
-{
-  __rtld_lock_default_lock_recursive (lock);
-}
-
-static void
-rtld_lock_default_unlock_recursive (void *lock)
-{
-  __rtld_lock_default_unlock_recursive (lock);
-}
-#endif
-
 
 static void
 security_init (void)
@@ -1139,22 +1122,13 @@ dl_main (const ElfW(Phdr) *phdr,
   struct dl_main_state state;
   dl_main_state_init (&state);
 
-  GL(dl_init_static_tls) = &_dl_nothread_init_static_tls;
+  __tls_pre_init_tp ();
 
-#if defined SHARED && defined _LIBC_REENTRANT \
-    && defined __rtld_lock_default_lock_recursive
-  GL(dl_rtld_lock_recursive) = rtld_lock_default_lock_recursive;
-  GL(dl_rtld_unlock_recursive) = rtld_lock_default_unlock_recursive;
-#endif
-
-#if THREAD_GSCOPE_IN_TCB
-  INIT_LIST_HEAD (&GL (dl_stack_used));
-  INIT_LIST_HEAD (&GL (dl_stack_user));
-#endif
-
+#if !PTHREAD_IN_LIBC
   /* The explicit initialization here is cheaper than processing the reloc
      in the _rtld_local definition's initializer.  */
   GL(dl_make_stack_executable_hook) = &_dl_make_stack_executable;
+#endif
 
   /* Process the environment variable which control the behaviour.  */
   process_envvars (&state);
@@ -1287,6 +1261,14 @@ dl_main (const ElfW(Phdr) *phdr,
 	    ++_dl_argv;
 	  }
 #endif
+	else if (! strcmp (_dl_argv[1], "--list-diagnostics"))
+	  {
+	    state.mode = rtld_mode_list_diagnostics;
+
+	    ++_dl_skip_args;
+	    --_dl_argc;
+	    ++_dl_argv;
+	  }
 	else if (strcmp (_dl_argv[1], "--help") == 0)
 	  {
 	    state.mode = rtld_mode_help;
@@ -1314,6 +1296,9 @@ dl_main (const ElfW(Phdr) *phdr,
 	  _exit (0);
 	}
 #endif
+
+      if (state.mode == rtld_mode_list_diagnostics)
+	_dl_print_diagnostics (_environ);
 
       /* If we have no further argument the program was called incorrectly.
 	 Grant the user some education.  */
@@ -1736,7 +1721,7 @@ dl_main (const ElfW(Phdr) *phdr,
   /* Add the dynamic linker to the TLS list if it also uses TLS.  */
   if (GL(dl_rtld_map).l_tls_blocksize != 0)
     /* Assign a module ID.  Do this before loading any audit modules.  */
-    GL(dl_rtld_map).l_tls_modid = _dl_next_tls_modid ();
+    _dl_assign_tls_modid (&GL(dl_rtld_map));
 
   audit_list_add_dynamic_tag (&state.audit_list, main_map, DT_AUDIT);
   audit_list_add_dynamic_tag (&state.audit_list, main_map, DT_DEPAUDIT);
@@ -2355,6 +2340,9 @@ dl_main (const ElfW(Phdr) *phdr,
 	 loader.  */
       __rtld_malloc_init_real (main_map);
 
+      /* Likewise for the locking implementation.  */
+      __rtld_mutex_init ();
+
       /* Mark all the objects so we know they have been already relocated.  */
       for (struct link_map *l = main_map; l != NULL; l = l->l_next)
 	{
@@ -2440,9 +2428,7 @@ dl_main (const ElfW(Phdr) *phdr,
       if (__glibc_unlikely (lossage != NULL))
 	_dl_fatal_printf ("cannot set up thread-local storage: %s\n",
 			  lossage);
-#if THREAD_GSCOPE_IN_TCB
-      list_add (&THREAD_SELF->list, &GL (dl_stack_user));
-#endif
+      __tls_init_tp ();
     }
 
   /* Make sure no new search directories have been added.  */
@@ -2461,6 +2447,9 @@ dl_main (const ElfW(Phdr) *phdr,
 	 its symbols (and potentially calling IFUNC resolvers) is safe
 	 at this point.  */
       __rtld_malloc_init_real (main_map);
+
+      /* Likewise for the locking implementation.  */
+      __rtld_mutex_init ();
 
       RTLD_TIMING_VAR (start);
       rtld_timer_start (&start);
@@ -2649,12 +2638,6 @@ a filename can be specified using the LD_DEBUG_OUTPUT environment variable.\n");
     }
 }
 
-/* Process all environments variables the dynamic linker must recognize.
-   Since all of them start with `LD_' we are a bit smarter while finding
-   all the entries.  */
-extern char **_environ attribute_hidden;
-
-
 static void
 process_envvars (struct dl_main_state *state)
 {

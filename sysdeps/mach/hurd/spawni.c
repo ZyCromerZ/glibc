@@ -333,6 +333,7 @@ __spawni (pid_t *pid, const char *file,
 
   ss = _hurd_self_sigstate ();
 
+retry:
   assert (! __spin_lock_locked (&ss->critical_section_lock));
   __spin_lock (&ss->critical_section_lock);
 
@@ -437,7 +438,19 @@ __spawni (pid_t *pid, const char *file,
 						 MACH_PORT_RIGHT_SEND, +1));
 
   if (err)
-    goto out;
+    {
+      _hurd_critical_section_unlock (ss);
+
+      if (err == EINTR)
+	{
+	  /* Got a signal while inside an RPC of the critical section, retry again */
+	  __mach_port_deallocate (__mach_task_self (), auth);
+	  auth = MACH_PORT_NULL;
+	  goto retry;
+	}
+
+      goto out;
+    }
 
   /* Pack up the descriptor table to give the new program.
      These descriptors will need to be reauthenticated below
@@ -490,6 +503,19 @@ __spawni (pid_t *pid, const char *file,
 		return 0;
 	      }
 	    return EBADF;
+	  }
+
+	/* Close file descriptors in the child.  */
+	error_t do_closefrom (int lowfd)
+	  {
+	    while ((unsigned int) lowfd < dtablesize)
+	      {
+		error_t err = do_close (lowfd);
+		if (err != 0 && err != EBADF)
+		  return err;
+		lowfd++;
+	      }
+	    return 0;
 	  }
 
 	/* Make sure the dtable can hold NEWFD.  */
@@ -599,6 +625,10 @@ __spawni (pid_t *pid, const char *file,
 
 	  case spawn_do_fchdir:
 	    err = child_fchdir (action->action.fchdir_action.fd);
+	    break;
+
+	  case spawn_do_closefrom:
+	    err = do_closefrom (action->action.closefrom_action.from);
 	    break;
 	  }
 

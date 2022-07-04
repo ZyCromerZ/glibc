@@ -93,6 +93,10 @@ typedef struct link_map *lookup_t;
    : (__glibc_unlikely ((ref)->st_shndx == SHN_ABS) ? 0			\
       : LOOKUP_VALUE_ADDRESS (map, map_set)) + (ref)->st_value)
 
+/* Type of a constructor function, in DT_INIT, DT_INIT_ARRAY,
+   DT_PREINIT_ARRAY.  */
+typedef void (*dl_init_t) (int, char **, char **);
+
 /* On some architectures a pointer to a function is not just a pointer
    to the actual code of the function but rather an architecture
    specific descriptor. */
@@ -101,7 +105,7 @@ typedef struct link_map *lookup_t;
  (void *) SYMBOL_ADDRESS (map, ref, false)
 # define DL_LOOKUP_ADDRESS(addr) ((ElfW(Addr)) (addr))
 # define DL_CALL_DT_INIT(map, start, argc, argv, env) \
- ((init_t) (start)) (argc, argv, env)
+ ((dl_init_t) (start)) (argc, argv, env)
 # define DL_CALL_DT_FINI(map, start) ((fini_t) (start)) ()
 #endif
 
@@ -129,12 +133,6 @@ dl_symbol_visibility_binds_local_p (const ElfW(Sym) *sym)
 /* Unmap a loaded object, called by _dl_close (). */
 #ifndef DL_UNMAP_IS_SPECIAL
 # define DL_UNMAP(map)	_dl_unmap_segments (map)
-#endif
-
-/* By default we do not need special support to initialize DSOs loaded
-   by statically linked binaries.  */
-#ifndef DL_STATIC_INIT
-# define DL_STATIC_INIT(map)
 #endif
 
 /* Reloc type classes as returned by elf_machine_type_class().
@@ -399,7 +397,7 @@ struct rtld_global
   struct auditstate _dl_rtld_auditstate[DL_NNS];
 #endif
 
-#if defined SHARED && defined _LIBC_REENTRANT \
+#if !PTHREAD_IN_LIBC && defined SHARED \
     && defined __rtld_lock_default_lock_recursive
   EXTERN void (*_dl_rtld_lock_recursive) (void *);
   EXTERN void (*_dl_rtld_unlock_recursive) (void *);
@@ -412,10 +410,12 @@ struct rtld_global
 #endif
 #include <dl-procruntime.c>
 
+#if !PTHREAD_IN_LIBC
   /* If loading a shared object requires that we make the stack executable
      when it was not, we do it by calling this function.
      It returns an errno code or zero on success.  */
   EXTERN int (*_dl_make_stack_executable_hook) (void **);
+#endif
 
   /* Prevailing state of the stack, PF_X indicating it's executable.  */
   EXTERN ElfW(Word) _dl_stack_flags;
@@ -437,12 +437,8 @@ struct rtld_global
   } *_dl_tls_dtv_slotinfo_list;
   /* Number of modules in the static TLS block.  */
   EXTERN size_t _dl_tls_static_nelem;
-  /* Size of the static TLS block.  */
-  EXTERN size_t _dl_tls_static_size;
   /* Size actually allocated in the static TLS block.  */
   EXTERN size_t _dl_tls_static_used;
-  /* Alignment requirement of the static TLS block.  */
-  EXTERN size_t _dl_tls_static_align;
   /* Remaining amount of static TLS that may be used for optimizing
      dynamic TLS access (e.g. with TLSDESC).  */
   EXTERN size_t _dl_tls_static_optional;
@@ -460,7 +456,9 @@ struct rtld_global
   /* Generation counter for the dtv.  */
   EXTERN size_t _dl_tls_generation;
 
+#if !THREAD_GSCOPE_IN_TCB
   EXTERN void (*_dl_init_static_tls) (struct link_map *);
+#endif
 
   /* Scopes to free after next THREAD_GSCOPE_WAIT ().  */
   EXTERN struct dl_scope_free_list
@@ -474,6 +472,17 @@ struct rtld_global
 
   /* List of thread stacks that were allocated by the application.  */
   EXTERN list_t _dl_stack_user;
+
+  /* List of queued thread stacks.  */
+  EXTERN list_t _dl_stack_cache;
+
+  /* Total size of all stacks in the cache (sum over stackblock_size).  */
+  EXTERN size_t _dl_stack_cache_actsize;
+
+  /* We need to record what list operations we are going to do so
+     that, in case of an asynchronous interruption due to a fork()
+     call, we can correct for the work.  */
+  EXTERN uintptr_t _dl_in_flight_stack;
 
   /* Mutex protecting the stack lists.  */
   EXTERN int _dl_stack_cache_lock;
@@ -536,6 +545,9 @@ struct rtld_global_ro
   /* Cached value of `getpagesize ()'.  */
   EXTERN size_t _dl_pagesize;
 
+  /* Cached value of `sysconf (_SC_MINSIGSTKSZ)'.  */
+  EXTERN size_t _dl_minsigstacksize;
+
   /* Do we read from ld.so.cache?  */
   EXTERN int _dl_inhibit_cache;
 
@@ -593,6 +605,12 @@ struct rtld_global_ro
      0 if not, -2 use the default (honor biases for normal
      binaries, don't honor for PIEs).  */
   EXTERN ElfW(Addr) _dl_use_load_bias;
+
+  /* Size of the static TLS block.  */
+  EXTERN size_t _dl_tls_static_size;
+
+  /* Alignment requirement of the static TLS block.  */
+  EXTERN size_t _dl_tls_static_align;
 
   /* Size of surplus space in the static TLS area for dynamically
      loaded modules with IE-model TLS or for TLSDESC optimization.
@@ -655,10 +673,22 @@ struct rtld_global_ro
   void *(*_dl_open) (const char *file, int mode, const void *caller_dlopen,
 		     Lmid_t nsid, int argc, char *argv[], char *env[]);
   void (*_dl_close) (void *map);
+  /* libdl in a secondary namespace (after dlopen) must use
+     _dl_catch_error from the main namespace, so it has to be
+     exported in some way.  */
+  int (*_dl_catch_error) (const char **objname, const char **errstring,
+			  bool *mallocedp, void (*operate) (void *),
+			  void *args);
+  /* libdl in a secondary namespace must use free from the base
+     namespace.  */
+  void (*_dl_error_free) (void *);
   void *(*_dl_tls_get_addr_soft) (struct link_map *);
 #ifdef HAVE_DL_DISCOVER_OSVERSION
   int (*_dl_discover_osversion) (void);
 #endif
+
+  /* Dynamic linker operations used after static dlopen.  */
+  const struct dlfcn_hook *_dl_dlfcn_hook;
 
   /* List of auditing interfaces.  */
   struct audit_ifaces *_dl_audit;
@@ -688,10 +718,17 @@ extern const ElfW(Phdr) *_dl_phdr;
 extern size_t _dl_phnum;
 #endif
 
+#if PTHREAD_IN_LIBC
+/* This function changes the permissions of all stacks (not just those
+   of the main stack).  */
+int _dl_make_stacks_executable (void **stack_endp) attribute_hidden;
+#else
 /* This is the initial value of GL(dl_make_stack_executable_hook).
-   A threads library can change it.  */
+   A threads library can change it.  The ld.so implementation changes
+   the permissions of the main stack only.  */
 extern int _dl_make_stack_executable (void **stack_endp);
 rtld_hidden_proto (_dl_make_stack_executable)
+#endif
 
 /* Variable pointing to the end of the stack (or close to it).  This value
    must be constant over the runtime of the application.  Some programs
@@ -810,6 +847,10 @@ void _dl_exception_create (struct dl_exception *, const char *object,
   __attribute__ ((nonnull (1, 3)));
 rtld_hidden_proto (_dl_exception_create)
 
+/* Used internally to implement dlerror message freeing.  See
+   include/dlfcn.h and dlfcn/dlerror.c.  */
+void _dl_error_free (void *ptr) attribute_hidden;
+
 /* Like _dl_exception_create, but create errstring from a format
    string FMT.  Currently, only "%s" and "%%" are supported as format
    directives.  */
@@ -892,6 +933,9 @@ extern int _dl_catch_error (const char **objname, const char **errstring,
 			    bool *mallocedp, void (*operate) (void *),
 			    void *args);
 libc_hidden_proto (_dl_catch_error)
+
+/* Used for initializing GLRO (_dl_catch_error).  */
+extern __typeof__ (_dl_catch_error) _rtld_catch_error attribute_hidden;
 
 /* Call OPERATE (ARGS).  If no error occurs, set *EXCEPTION to zero.
    Otherwise, store a copy of the raised exception in *EXCEPTION,
@@ -1127,8 +1171,8 @@ extern ElfW(Addr) _dl_sysdep_start (void **start_argptr,
 extern void _dl_sysdep_start_cleanup (void) attribute_hidden;
 
 
-/* Determine next available module ID.  */
-extern size_t _dl_next_tls_modid (void) attribute_hidden;
+/* Determine next available module ID and set the L l_tls_modid.  */
+extern void _dl_assign_tls_modid (struct link_map *l) attribute_hidden;
 
 /* Count the modules with TLS segments.  */
 extern size_t _dl_count_modids (void) attribute_hidden;
@@ -1139,6 +1183,15 @@ extern void _dl_determine_tlsoffset (void) attribute_hidden;
 /* Calculate the size of the static TLS surplus, when the given
    number of audit modules are loaded.  */
 void _dl_tls_static_surplus_init (size_t naudit) attribute_hidden;
+
+/* This function is called very early from dl_main to set up TLS and
+   other thread-related data structures.  */
+void __tls_pre_init_tp (void) attribute_hidden;
+
+/* This function is called after processor-specific initialization of
+   the TCB and thread pointer via TLS_INIT_TP, to complete very early
+   initialization of the thread library.  */
+void __tls_init_tp (void) attribute_hidden;
 
 #ifndef SHARED
 /* Set up the TCB for statically linked applications.  This is called
@@ -1242,6 +1295,30 @@ extern void _dl_non_dynamic_init (void)
 extern void _dl_aux_init (ElfW(auxv_t) *av)
      attribute_hidden;
 
+/* Initialize the static TLS space for the link map in all existing
+   threads. */
+#if THREAD_GSCOPE_IN_TCB
+void _dl_init_static_tls (struct link_map *map) attribute_hidden;
+#endif
+static inline void
+dl_init_static_tls (struct link_map *map)
+{
+#if THREAD_GSCOPE_IN_TCB
+  /* The stack list is available to ld.so, so the initialization can
+     be handled within ld.so directly.  */
+  _dl_init_static_tls (map);
+#else
+  GL (dl_init_static_tls) (map);
+#endif
+}
+
+#ifndef SHARED
+/* Called before relocating ld.so during static dlopen.  This can be
+   used to partly initialize the dormant ld.so copy in the static
+   dlopen namespace.  */
+void __rtld_static_init (struct link_map *map) attribute_hidden;
+#endif
+
 /* Return true if the ld.so copy in this namespace is actually active
    and working.  If false, the dl_open/dlfcn hooks have to be used to
    call into the outer dynamic linker (which happens after static
@@ -1270,6 +1347,29 @@ link_map_audit_state (struct link_map *l, size_t index)
     }
 }
 #endif /* SHARED */
+
+#if PTHREAD_IN_LIBC && defined SHARED
+/* Recursive locking implementation for use within the dynamic loader.
+   Used to define the __rtld_lock_lock_recursive and
+   __rtld_lock_unlock_recursive via <libc-lock.h>.  Initialized to a
+   no-op dummy implementation early.  Similar
+   to GL (dl_rtld_lock_recursive) and GL (dl_rtld_unlock_recursive)
+   in !PTHREAD_IN_LIBC builds.  */
+extern int (*___rtld_mutex_lock) (pthread_mutex_t *) attribute_hidden;
+extern int (*___rtld_mutex_unlock) (pthread_mutex_t *lock) attribute_hidden;
+
+/* Called after libc has been loaded, but before RELRO is activated.
+   Used to initialize the function pointers to the actual
+   implementations.  */
+void __rtld_mutex_init (void) attribute_hidden;
+#else /* !PTHREAD_IN_LIBC */
+static inline void
+__rtld_mutex_init (void)
+{
+  /* The initialization happens later (!PTHREAD_IN_LIBC) or is not
+     needed at all (!SHARED).  */
+}
+#endif /* !PTHREAD_IN_LIBC */
 
 #if THREAD_GSCOPE_IN_TCB
 void __thread_gscope_wait (void) attribute_hidden;

@@ -17,215 +17,73 @@
    License along with the GNU C Library; if not, see
    <https://www.gnu.org/licenses/>.  */
 
-#include <alloca.h>
-#include <assert.h>
-#include <ctype.h>
+#include <array_length.h>
 #include <dirent.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <mntent.h>
-#include <paths.h>
+#include <ldsodefs.h>
+#include <limits.h>
+#include <not-cancel.h>
 #include <stdio.h>
 #include <stdio_ext.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <sys/mman.h>
 #include <sys/sysinfo.h>
+#include <sysdep.h>
 
-#include <atomic.h>
-#include <not-cancel.h>
-
-
-/* How we can determine the number of available processors depends on
-   the configuration.  There is currently (as of version 2.0.21) no
-   system call to determine the number.  It is planned for the 2.1.x
-   series to add this, though.
-
-   One possibility to implement it for systems using Linux 2.0 is to
-   examine the pseudo file /proc/cpuinfo.  Here we have one entry for
-   each processor.
-
-   But not all systems have support for the /proc filesystem.  If it
-   is not available we simply return 1 since there is no way.  */
-
-
-/* Other architectures use different formats for /proc/cpuinfo.  This
-   provides a hook for alternative parsers.  */
-#ifndef GET_NPROCS_PARSER
-# define GET_NPROCS_PARSER(FD, BUFFER, CP, RE, BUFFER_END, RESULT) \
-  do									\
-    {									\
-      (RESULT) = 0;							\
-      /* Read all lines and count the lines starting with the string	\
-	 "processor".  We don't have to fear extremely long lines since	\
-	 the kernel will not generate them.  8192 bytes are really	\
-	 enough.  */							\
-      char *l;								\
-      while ((l = next_line (FD, BUFFER, &CP, &RE, BUFFER_END)) != NULL) \
-	if (strncmp (l, "processor", 9) == 0)				\
-	  ++(RESULT);							\
-    }									\
-  while (0)
-#endif
-
-
-static char *
-next_line (int fd, char *const buffer, char **cp, char **re,
-	   char *const buffer_end)
+/* Compute the population count of the entire array.  */
+static int
+__get_nprocs_count (const unsigned long int *array, size_t length)
 {
-  char *res = *cp;
-  char *nl = memchr (*cp, '\n', *re - *cp);
-  if (nl == NULL)
-    {
-      if (*cp != buffer)
-	{
-	  if (*re == buffer_end)
-	    {
-	      memmove (buffer, *cp, *re - *cp);
-	      *re = buffer + (*re - *cp);
-	      *cp = buffer;
-
-	      ssize_t n = __read_nocancel (fd, *re, buffer_end - *re);
-	      if (n < 0)
-		return NULL;
-
-	      *re += n;
-
-	      nl = memchr (*cp, '\n', *re - *cp);
-	      while (nl == NULL && *re == buffer_end)
-		{
-		  /* Truncate too long lines.  */
-		  *re = buffer + 3 * (buffer_end - buffer) / 4;
-		  n = __read_nocancel (fd, *re, buffer_end - *re);
-		  if (n < 0)
-		    return NULL;
-
-		  nl = memchr (*re, '\n', n);
-		  **re = '\n';
-		  *re += n;
-		}
-	    }
-	  else
-	    nl = memchr (*cp, '\n', *re - *cp);
-
-	  res = *cp;
-	}
-
-      if (nl == NULL)
-	nl = *re - 1;
-    }
-
-  *cp = nl + 1;
-  assert (*cp <= *re);
-
-  return res == *re ? NULL : res;
+  int count = 0;
+  for (size_t i = 0; i < length; ++i)
+    if (__builtin_add_overflow (count,  __builtin_popcountl (array[i]),
+				&count))
+      return INT_MAX;
+  return count;
 }
 
+/* __get_nprocs with a large buffer.  */
+static int
+__get_nprocs_large (void)
+{
+  /* This code cannot use scratch_buffer because it is used during
+     malloc initialization.  */
+  size_t pagesize = GLRO (dl_pagesize);
+  unsigned long int *page = __mmap (0, pagesize, PROT_READ | PROT_WRITE,
+				    MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  if (page == MAP_FAILED)
+    return 2;
+  int r = INTERNAL_SYSCALL_CALL (sched_getaffinity, 0, pagesize, page);
+  int count;
+  if (r > 0)
+    count = __get_nprocs_count (page, pagesize / sizeof (unsigned long int));
+  else if (r == -EINVAL)
+    /* One page is still not enough to store the bits.  A more-or-less
+       arbitrary value.  This assumes t hat such large systems never
+       happen in practice.  */
+    count = GLRO (dl_pagesize) * CHAR_BIT;
+  else
+    count = 2;
+  __munmap (page, GLRO (dl_pagesize));
+  return count;
+}
 
 int
 __get_nprocs (void)
 {
-  static int cached_result = -1;
-  static time_t timestamp;
-
-  time_t now = time_now ();
-  time_t prev = timestamp;
-  atomic_read_barrier ();
-  if (now == prev && cached_result > -1)
-    return cached_result;
-
-  /* XXX Here will come a test for the new system call.  */
-
-  const size_t buffer_size = __libc_use_alloca (8192) ? 8192 : 512;
-  char *buffer = alloca (buffer_size);
-  char *buffer_end = buffer + buffer_size;
-  char *cp = buffer_end;
-  char *re = buffer_end;
-
-  const int flags = O_RDONLY | O_CLOEXEC;
-  /* This file contains comma-separated ranges.  */
-  int fd = __open_nocancel ("/sys/devices/system/cpu/online", flags);
-  char *l;
-  int result = 0;
-  if (fd != -1)
-    {
-      l = next_line (fd, buffer, &cp, &re, buffer_end);
-      if (l != NULL)
-	do
-	  {
-	    char *endp;
-	    unsigned long int n = strtoul (l, &endp, 10);
-	    if (l == endp)
-	      {
-		result = 0;
-		break;
-	      }
-
-	    unsigned long int m = n;
-	    if (*endp == '-')
-	      {
-		l = endp + 1;
-		m = strtoul (l, &endp, 10);
-		if (l == endp)
-		  {
-		    result = 0;
-		    break;
-		  }
-	      }
-
-	    result += m - n + 1;
-
-	    l = endp;
-	    if (l < re && *l == ',')
-	      ++l;
-	  }
-	while (l < re && *l != '\n');
-
-      __close_nocancel_nostatus (fd);
-
-      if (result > 0)
-	goto out;
-    }
-
-  cp = buffer_end;
-  re = buffer_end;
-
-  /* Default to an SMP system in case we cannot obtain an accurate
-     number.  */
-  result = 2;
-
-  /* The /proc/stat format is more uniform, use it by default.  */
-  fd = __open_nocancel ("/proc/stat", flags);
-  if (fd != -1)
-    {
-      result = 0;
-
-      while ((l = next_line (fd, buffer, &cp, &re, buffer_end)) != NULL)
-	/* The current format of /proc/stat has all the cpu* entries
-	   at the front.  We assume here that stays this way.  */
-	if (strncmp (l, "cpu", 3) != 0)
-	  break;
-	else if (isdigit (l[3]))
-	  ++result;
-
-      __close_nocancel_nostatus (fd);
-    }
+  /* Fast path for most systems.  The kernel expects a buffer size
+     that is a multiple of 8.  */
+  unsigned long int small_buffer[1024 / CHAR_BIT / sizeof (unsigned long int)];
+  int r = INTERNAL_SYSCALL_CALL (sched_getaffinity, 0,
+				 sizeof (small_buffer), small_buffer);
+  if (r > 0)
+    return __get_nprocs_count (small_buffer, r / sizeof (unsigned long int));
+  else if (r == -EINVAL)
+    /* The kernel requests a larger buffer to store the data.  */
+    return __get_nprocs_large ();
   else
-    {
-      fd = __open_nocancel ("/proc/cpuinfo", flags);
-      if (fd != -1)
-	{
-	  GET_NPROCS_PARSER (fd, buffer, cp, re, buffer_end, result);
-	  __close_nocancel_nostatus (fd);
-	}
-    }
-
- out:
-  cached_result = result;
-  atomic_write_barrier ();
-  timestamp = now;
-
-  return result;
+    /* Some other error.  2 is conservative (not a uniprocessor
+       system, so atomics are needed). */
+    return 2;
 }
 libc_hidden_def (__get_nprocs)
 weak_alias (__get_nprocs, get_nprocs)
@@ -236,8 +94,6 @@ weak_alias (__get_nprocs, get_nprocs)
 int
 __get_nprocs_conf (void)
 {
-  /* XXX Here will come a test for the new system call.  */
-
   /* Try to use the sysfs filesystem.  It has actual information about
      online processors.  */
   DIR *dir = __opendir ("/sys/devices/system/cpu");
@@ -261,25 +117,7 @@ __get_nprocs_conf (void)
       return count;
     }
 
-  int result = 1;
-
-#ifdef GET_NPROCS_CONF_PARSER
-  /* If we haven't found an appropriate entry return 1.  */
-  FILE *fp = fopen ("/proc/cpuinfo", "rce");
-  if (fp != NULL)
-    {
-      char buffer[8192];
-
-      /* No threads use this stream.  */
-      __fsetlocking (fp, FSETLOCKING_BYCALLER);
-      GET_NPROCS_CONF_PARSER (fp, buffer, result);
-      fclose (fp);
-    }
-#else
-  result = __get_nprocs ();
-#endif
-
-  return result;
+  return 1;
 }
 libc_hidden_def (__get_nprocs_conf)
 weak_alias (__get_nprocs_conf, get_nprocs_conf)

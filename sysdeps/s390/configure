@@ -123,7 +123,9 @@ void testinsn (char *buf)
     __asm__ (".machine \"arch13\" \n\t"
 	     ".machinemode \"zarch_nohighgprs\" \n\t"
 	     "lghi %%r0,16 \n\t"
-	     "mvcrl 0(%0),32(%0)" : : "a" (buf) : "memory", "r0");
+	     "mvcrl 0(%0),32(%0) \n\t"
+	     "vstrs %%v20,%%v20,%%v20,%%v20,0,2"
+	     : : "a" (buf) : "memory", "r0");
 }
 EOF
 if { ac_try='${CC-cc} $CFLAGS $CPPFLAGS $LDFLAGS --shared conftest.c
@@ -271,7 +273,9 @@ else
 void testinsn (char *buf)
 {
     __asm__ ("lghi %%r0,16 \n\t"
-	     "mvcrl 0(%0),32(%0)" : : "a" (buf) : "memory", "r0");
+	     "mvcrl 0(%0),32(%0) \n\t"
+	     "vstrs %%v20,%%v20,%%v20,%%v20,0,2"
+	     : : "a" (buf) : "memory", "r0");
 }
 EOF
 if { ac_try='${CC-cc} $CFLAGS $CPPFLAGS $LDFLAGS --shared conftest.c
@@ -297,6 +301,7 @@ then
 fi
 
 
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking if $CC is sufficient to build libc on s390x" >&5
 $as_echo_n "checking if $CC is sufficient to build libc on s390x... " >&6; }
 if ${libc_cv_compiler_ok_on_s390x+:} false; then :
@@ -318,12 +323,12 @@ main ()
   return 0;
 }
 _ACEOF
-if ac_fn_c_try_compile "$LINENO"; then :
+if ac_fn_c_try_cpp "$LINENO"; then :
   libc_cv_compiler_ok_on_s390x=yes
 else
   libc_cv_compiler_ok_on_s390x=no
 fi
-rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+rm -f conftest.err conftest.i conftest.$ac_ext
 fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: result: $libc_cv_compiler_ok_on_s390x" >&5
 $as_echo "$libc_cv_compiler_ok_on_s390x" >&6; }

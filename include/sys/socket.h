@@ -118,7 +118,8 @@ libc_hidden_proto (__recvmmsg64)
    Returns 0 on success, -1 for errors.  */
 extern int __setsockopt (int __fd, int __level, int __optname,
 			 const void *__optval,
-			 socklen_t __optlen) attribute_hidden;
+			 socklen_t __optlen);
+libc_hidden_proto (__setsockopt)
 
 /* Put the current value for socket FD's option OPTNAME at protocol level LEVEL
    into OPTVAL (which is *OPTLEN bytes long), and set *OPTLEN to the value's
@@ -163,6 +164,11 @@ libc_hidden_proto (__libc_sa_len)
 #endif
 
 libc_hidden_proto (__cmsg_nxthdr)
+
+#ifndef __ASSUME_TIME64_SYSCALLS
+extern void __convert_scm_timestamps (struct msghdr *msg, socklen_t msgsize)
+     attribute_hidden;
+#endif
 
 #endif
 #endif

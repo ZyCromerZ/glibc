@@ -27,7 +27,7 @@
 #include <assert.h>
 #include "proc_service.h"
 #include "thread_db.h"
-#include "../nptl/pthreadP.h"  	/* This is for *_BITMASK only.  */
+#include <pthreadP.h>  	/* This is for *_BITMASK only.  */
 #include <list.h>
 #include <gnu/lib-names.h>
 #include <libc-diag.h>
@@ -107,6 +107,8 @@ struct td_thragent
 # undef DB_FUNCTION
 # undef DB_SYMBOL
 # undef DB_VARIABLE
+
+  psaddr_t ta_addr__rtld_global;
 
   /* The method of locating a thread's th_unique value.  */
   enum

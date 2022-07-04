@@ -88,7 +88,9 @@ void testinsn (char *buf)
     __asm__ (".machine \"arch13\" \n\t"
 	     ".machinemode \"zarch_nohighgprs\" \n\t"
 	     "lghi %%r0,16 \n\t"
-	     "mvcrl 0(%0),32(%0)" : : "a" (buf) : "memory", "r0");
+	     "mvcrl 0(%0),32(%0) \n\t"
+	     "vstrs %%v20,%%v20,%%v20,%%v20,0,2"
+	     : : "a" (buf) : "memory", "r0");
 }
 EOF
 dnl test, if assembler supports S390 arch13 instructions
@@ -195,7 +197,9 @@ cat > conftest.c <<\EOF
 void testinsn (char *buf)
 {
     __asm__ ("lghi %%r0,16 \n\t"
-	     "mvcrl 0(%0),32(%0)" : : "a" (buf) : "memory", "r0");
+	     "mvcrl 0(%0),32(%0) \n\t"
+	     "vstrs %%v20,%%v20,%%v20,%%v20,0,2"
+	     : : "a" (buf) : "memory", "r0");
 }
 EOF
 dnl test, if assembler supports S390 arch13 zarch instructions as default
@@ -218,11 +222,11 @@ dnl overflow
 dnl (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98269)
 AC_CACHE_CHECK([if $CC is sufficient to build libc on s390x],
 libc_cv_compiler_ok_on_s390x, [
-AC_TRY_COMPILE([], [
+AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[]], [[
 #if !defined __GNUC__ || __GNUC__ < 7 || (__GNUC__ == 7 && __GNUC_MINOR__ < 1)
 #error insufficient compiler for building on s390x
 #endif
-],
+]])],
 	[libc_cv_compiler_ok_on_s390x=yes],
 	[libc_cv_compiler_ok_on_s390x=no])])
 if test "$libc_cv_compiler_ok_on_s390x" != yes; then

@@ -18,12 +18,28 @@
 
 #include <stdlib.h>
 #include "pthreadP.h"
-
+#include <shlib-compat.h>
 
 void
-__pthread_testcancel (void)
+___pthread_testcancel (void)
 {
-  CANCELLATION_P (THREAD_SELF);
+  struct pthread *self = THREAD_SELF;
+  int cancelhandling = THREAD_GETMEM (self, cancelhandling);
+  if (self->cancelstate == PTHREAD_CANCEL_ENABLE
+      && (cancelhandling & CANCELED_BITMASK)
+      && !(cancelhandling & EXITING_BITMASK)
+      && !(cancelhandling & TERMINATED_BITMASK))
+    {
+      THREAD_SETMEM (self, result, PTHREAD_CANCELED);
+      __do_cancel ();
+    }
 }
-strong_alias (__pthread_testcancel, pthread_testcancel)
-hidden_def (__pthread_testcancel)
+versioned_symbol (libc, ___pthread_testcancel, pthread_testcancel, GLIBC_2_34);
+libc_hidden_ver (___pthread_testcancel, __pthread_testcancel)
+#ifndef SHARED
+strong_alias (___pthread_testcancel, __pthread_testcancel)
+#endif
+
+#if OTHER_SHLIB_COMPAT (libpthread, GLIBC_2_0, GLIBC_2_34)
+compat_symbol (libc, ___pthread_testcancel, pthread_testcancel, GLIBC_2_0);
+#endif

@@ -27,6 +27,7 @@
 
 #ifndef WIDE
 # define STRNLEN strnlen
+# define MEMSET memset
 # define CHAR char
 # define BIG_CHAR CHAR_MAX
 # define MIDDLE_CHAR 127
@@ -34,6 +35,7 @@
 #else
 # include <wchar.h>
 # define STRNLEN wcsnlen
+# define MEMSET wmemset
 # define CHAR wchar_t
 # define BIG_CHAR WCHAR_MAX
 # define MIDDLE_CHAR 1121
@@ -85,6 +87,42 @@ do_test (size_t align, size_t len, size_t maxlen, int max_char)
 
   FOR_EACH_IMPL (impl, 0)
     do_one_test (impl, (CHAR *) (buf + align), maxlen, MIN (len, maxlen));
+}
+
+static void
+do_overflow_tests (void)
+{
+  size_t i, j, len;
+  const size_t one = 1;
+  uintptr_t buf_addr = (uintptr_t) buf1;
+
+  for (i = 0; i < 750; ++i)
+    {
+      do_test (0, i, SIZE_MAX - i, BIG_CHAR);
+      do_test (0, i, i - buf_addr, BIG_CHAR);
+      do_test (0, i, -buf_addr - i, BIG_CHAR);
+      do_test (0, i, SIZE_MAX - buf_addr - i, BIG_CHAR);
+      do_test (0, i, SIZE_MAX - buf_addr + i, BIG_CHAR);
+
+      len = 0;
+      for (j = 8 * sizeof(size_t) - 1; j ; --j)
+        {
+          len |= one << j;
+          do_test (0, i, len - i, BIG_CHAR);
+          do_test (0, i, len + i, BIG_CHAR);
+          do_test (0, i, len - buf_addr - i, BIG_CHAR);
+          do_test (0, i, len - buf_addr + i, BIG_CHAR);
+
+          do_test (0, i, ~len - i, BIG_CHAR);
+          do_test (0, i, ~len + i, BIG_CHAR);
+          do_test (0, i, ~len - buf_addr - i, BIG_CHAR);
+          do_test (0, i, ~len - buf_addr + i, BIG_CHAR);
+
+          do_test (0, i, -buf_addr, BIG_CHAR);
+          do_test (0, i, j - buf_addr, BIG_CHAR);
+          do_test (0, i, -buf_addr - j, BIG_CHAR);
+        }
+    }
 }
 
 static void
@@ -153,7 +191,7 @@ do_page_tests (void)
   size_t last_offset = (page_size / sizeof (CHAR)) - 1;
 
   CHAR *s = (CHAR *) buf2;
-  memset (s, 65, (last_offset - 1));
+  MEMSET (s, 65, (last_offset - 1));
   s[last_offset] = 0;
 
   /* Place short strings ending at page boundary.  */
@@ -196,10 +234,39 @@ do_page_tests (void)
     }
 }
 
+/* Tests meant to unveil fail on implementations that access bytes
+   beyond the maxium length.  */
+
+static void
+do_page_2_tests (void)
+{
+  size_t i, exp_len, offset;
+  size_t last_offset = page_size / sizeof (CHAR);
+
+  CHAR *s = (CHAR *) buf2;
+  MEMSET (s, 65, last_offset);
+
+  /* Place short strings ending at page boundary without the null
+     byte.  */
+  offset = last_offset;
+  for (i = 0; i < 128; i++)
+    {
+      /* Decrease offset to stress several sizes and alignments.  */
+      offset--;
+      exp_len = last_offset - offset;
+      FOR_EACH_IMPL (impl, 0)
+	{
+	  /* If an implementation goes beyond EXP_LEN, it will trigger
+	     the segfault.  */
+	  do_one_test (impl, (CHAR *) (s + offset), exp_len, exp_len);
+	}
+    }
+}
+
 int
 test_main (void)
 {
-  size_t i;
+  size_t i, length, char_per_page;
 
   test_init ();
 
@@ -240,8 +307,19 @@ test_main (void)
       do_test (1, 1 << i, 5000, BIG_CHAR);
     }
 
+  char_per_page = getpagesize () / sizeof (CHAR);
+
+  for (i = 0; i <= 127; i++)
+    for (length = i; length <= 512; length++)
+      {
+	do_test (i, length, 512, BIG_CHAR);
+	do_test (char_per_page - i, length, 512, BIG_CHAR);
+      }
+
   do_random_tests ();
   do_page_tests ();
+  do_page_2_tests ();
+  do_overflow_tests ();
   return ret;
 }
 

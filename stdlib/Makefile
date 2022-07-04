@@ -81,12 +81,14 @@ tests		:= tst-strtol tst-strtod testmb testrand testsort testdiv   \
 		   tst-width-stdint tst-strfrom tst-strfrom-locale	    \
 		   tst-getrandom tst-atexit tst-at_quick_exit 		    \
 		   tst-cxa_atexit tst-on_exit test-atexit-race 		    \
-		   test-at_quick_exit-race test-cxa_atexit-race             \
+		   test-at_quick_exit-race test-cxa_atexit-race		    \
+		   test-cxa_atexit-race2				    \
 		   test-on_exit-race test-dlclose-exit-race 		    \
 		   tst-makecontext-align test-bz22786 tst-strtod-nan-sign \
 		   tst-swapcontext1 tst-setcontext4 tst-setcontext5 \
 		   tst-setcontext6 tst-setcontext7 tst-setcontext8 \
-		   tst-setcontext9 tst-bz20544 tst-canon-bz26341
+		   tst-setcontext9 tst-bz20544 tst-canon-bz26341 \
+		   tst-realpath
 
 tests-internal	:= tst-strtod1i tst-strtod3 tst-strtod4 tst-strtod5i \
 		   tst-tls-atexit tst-tls-atexit-nodelete
@@ -100,10 +102,11 @@ endif
 LDLIBS-test-atexit-race = $(shared-thread-library)
 LDLIBS-test-at_quick_exit-race = $(shared-thread-library)
 LDLIBS-test-cxa_atexit-race = $(shared-thread-library)
+LDLIBS-test-cxa_atexit-race2 = $(shared-thread-library)
 LDLIBS-test-on_exit-race = $(shared-thread-library)
 LDLIBS-tst-canon-bz26341 = $(shared-thread-library)
 
-LDLIBS-test-dlclose-exit-race = $(shared-thread-library) $(libdl)
+LDLIBS-test-dlclose-exit-race = $(shared-thread-library)
 LDFLAGS-test-dlclose-exit-race = $(LDFLAGS-rdynamic)
 LDLIBS-test-dlclose-exit-race-helper.so = $(libsupport) $(shared-thread-library)
 
@@ -230,10 +233,10 @@ $(objpfx)tst-strtod-nan-sign: $(libm)
 tst-tls-atexit-lib.so-no-z-defs = yes
 test-dlclose-exit-race-helper.so-no-z-defs = yes
 
-$(objpfx)tst-tls-atexit: $(shared-thread-library) $(libdl)
+$(objpfx)tst-tls-atexit: $(shared-thread-library)
 $(objpfx)tst-tls-atexit.out: $(objpfx)tst-tls-atexit-lib.so
 
-$(objpfx)tst-tls-atexit-nodelete: $(shared-thread-library) $(libdl)
+$(objpfx)tst-tls-atexit-nodelete: $(shared-thread-library)
 $(objpfx)tst-tls-atexit-nodelete.out: $(objpfx)tst-tls-atexit-lib.so
 
 $(objpfx)tst-setcontext3.out: tst-setcontext3.sh $(objpfx)tst-setcontext3
@@ -241,5 +244,3 @@ $(objpfx)tst-setcontext3.out: tst-setcontext3.sh $(objpfx)tst-setcontext3
 		 '$(run-program-env)' '$(test-program-prefix-after-env)' \
 		 $(common-objpfx)stdlib/; \
 	$(evaluate-test)
-
-$(objpfx)tst-makecontext: $(libdl)

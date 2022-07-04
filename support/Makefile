@@ -39,8 +39,11 @@ libsupport-routines = \
   resolv_response_context_free \
   resolv_test \
   set_fortify_handler \
+  support_stack_alloc \
   support-xfstat \
+  support-xfstat-time64 \
   support-xstat \
+  support-xstat-time64 \
   support_become_root \
   support_can_chroot \
   support_capture_subprocess \
@@ -48,6 +51,7 @@ libsupport-routines = \
   support_chroot \
   support_copy_file \
   support_copy_file_range \
+  support_create_timer \
   support_descriptor_supports_holes \
   support_descriptors \
   support_enter_mount_namespace \
@@ -59,6 +63,7 @@ libsupport-routines = \
   support_format_hostent \
   support_format_netent \
   support_isolate_in_subprocess \
+  support_path_support_time64 \
   support_process_state \
   support_ptrace \
   support_openpty \
@@ -67,9 +72,12 @@ libsupport-routines = \
   support_quote_string \
   support_record_failure \
   support_run_diff \
+  support_select_modifies_timeout \
+  support_select_normalizes_timeout \
   support_set_small_thread_stack_size \
   support_shared_allocate \
   support_small_stack_thread_attribute \
+  support_stat_nanoseconds \
   support_subprocess \
   support_test_compare_blob \
   support_test_compare_failure \
@@ -79,8 +87,11 @@ libsupport-routines = \
   support_test_verify_impl \
   temp_file \
   timespec \
+  timespec-time64 \
   timespec-add \
+  timespec-add-time64 \
   timespec-sub \
+  timespec-sub-time64 \
   write_message \
   xaccept \
   xaccept4 \
@@ -90,6 +101,10 @@ libsupport-routines = \
   xchdir \
   xchroot \
   xclock_gettime \
+  xclock_gettime_time64 \
+  xclock_settime \
+  xclock_settime_time64 \
+  xclone \
   xclose \
   xchmod \
   xconnect \
@@ -107,6 +122,7 @@ libsupport-routines = \
   xlisten \
   xlseek \
   xlstat \
+  xlstat-time64 \
   xmalloc \
   xmemstream \
   xmkdir \
@@ -123,6 +139,7 @@ libsupport-routines = \
   xpthread_attr_init \
   xpthread_attr_setdetachstate \
   xpthread_attr_setguardsize \
+  xpthread_attr_setaffinity_np \
   xpthread_attr_setstack \
   xpthread_attr_setstacksize \
   xpthread_barrier_destroy \
@@ -139,6 +156,7 @@ libsupport-routines = \
   xpthread_join \
   xpthread_key_create \
   xpthread_key_delete \
+  xpthread_kill \
   xpthread_mutex_consistent \
   xpthread_mutex_destroy \
   xpthread_mutex_init \
@@ -209,6 +227,7 @@ CFLAGS-support_paths.c = \
 # in support_timespec_check_in_range and for that computation we use
 # -fexcess-precision=standard.
 CFLAGS-timespec.c += -fexcess-precision=standard
+CFLAGS-timespec-time64.c += -fexcess-precision=standard
 
 ifeq (,$(CXX))
 LINKS_DSO_PROGRAM = links-dso-program-c

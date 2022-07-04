@@ -17,11 +17,33 @@
    <https://www.gnu.org/licenses/>.  */
 
 #include "pthreadP.h"
-
+#include <tls.h>
+#include <libc-lock.h>
 
 void
-__libc_cleanup_routine (struct __pthread_cleanup_frame *f)
+__libc_cleanup_push_defer (struct _pthread_cleanup_buffer *buffer)
 {
-  if (f->__do_it)
-    f->__cancel_routine (f->__cancel_arg);
+  struct pthread *self = THREAD_SELF;
+
+  buffer->__prev = THREAD_GETMEM (self, cleanup);
+
+  /* Disable asynchronous cancellation for now.  */
+  buffer->__canceltype = THREAD_GETMEM (self, canceltype);
+  THREAD_SETMEM (self, canceltype, PTHREAD_CANCEL_DEFERRED);
+
+  THREAD_SETMEM (self, cleanup, buffer);
 }
+libc_hidden_def (__libc_cleanup_push_defer)
+
+void
+__libc_cleanup_pop_restore (struct _pthread_cleanup_buffer *buffer)
+{
+  struct pthread *self = THREAD_SELF;
+
+  THREAD_SETMEM (self, cleanup, buffer->__prev);
+
+  THREAD_SETMEM (self, canceltype, buffer->__canceltype);
+  if (buffer->__canceltype == PTHREAD_CANCEL_ASYNCHRONOUS)
+      __pthread_testcancel ();
+}
+libc_hidden_def (__libc_cleanup_pop_restore)
