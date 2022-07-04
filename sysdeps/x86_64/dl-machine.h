@@ -1,7 +1,6 @@
 /* Machine-dependent ELF dynamic relocation inline functions.  x86-64 version.
-   Copyright (C) 2001-2021 Free Software Foundation, Inc.
+   Copyright (C) 2001-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
-   Contributed by Andreas Jaeger <aj@suse.de>.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -22,10 +21,13 @@
 
 #define ELF_MACHINE_NAME "x86_64"
 
+#include <assert.h>
 #include <sys/param.h>
 #include <sysdep.h>
 #include <tls.h>
 #include <dl-tlsdesc.h>
+#include <dl-static-tls.h>
+#include <dl-machine-rel.h>
 
 /* Return nonzero iff ELF header is compatible with the running host.  */
 static inline int __attribute__ ((unused))
@@ -35,34 +37,28 @@ elf_machine_matches_host (const ElfW(Ehdr) *ehdr)
 }
 
 
-/* Return the link-time address of _DYNAMIC.  Conveniently, this is the
-   first element of the GOT.  This must be inlined in a function which
-   uses global data.  */
-static inline ElfW(Addr) __attribute__ ((unused))
-elf_machine_dynamic (void)
-{
-  /* This produces an IP-relative reloc which is resolved at link time. */
-  extern const ElfW(Addr) _GLOBAL_OFFSET_TABLE_[] attribute_hidden;
-  return _GLOBAL_OFFSET_TABLE_[0];
-}
-
-
 /* Return the run-time load address of the shared object.  */
 static inline ElfW(Addr) __attribute__ ((unused))
 elf_machine_load_address (void)
 {
-  /* Compute the difference between the runtime address of _DYNAMIC as seen
-     by an IP-relative reference, and the link-time address found in the
-     special unrelocated first GOT entry.  */
+  extern const ElfW(Ehdr) __ehdr_start attribute_hidden;
+  return (ElfW(Addr)) &__ehdr_start;
+}
+
+/* Return the link-time address of _DYNAMIC.  */
+static inline ElfW(Addr) __attribute__ ((unused))
+elf_machine_dynamic (void)
+{
   extern ElfW(Dyn) _DYNAMIC[] attribute_hidden;
-  return (ElfW(Addr)) &_DYNAMIC - elf_machine_dynamic ();
+  return (ElfW(Addr)) _DYNAMIC - elf_machine_load_address ();
 }
 
 /* Set up the loaded object described by L so its unrelocated PLT
    entries will jump to the on-demand fixup code in dl-runtime.c.  */
 
 static inline int __attribute__ ((unused, always_inline))
-elf_machine_runtime_setup (struct link_map *l, int lazy, int profile)
+elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
+			   int lazy, int profile)
 {
   Elf64_Addr *got;
   extern void _dl_runtime_resolve_fxsave (ElfW(Word)) attribute_hidden;
@@ -206,10 +202,6 @@ _dl_start_user:\n\
 // XXX This is a work-around for a broken linker.  Remove!
 #define ELF_MACHINE_IRELATIVE	R_X86_64_IRELATIVE
 
-/* The x86-64 never uses Elf64_Rel/Elf32_Rel relocations.  */
-#define ELF_MACHINE_NO_REL 1
-#define ELF_MACHINE_NO_RELA 0
-
 /* We define an initialization function.  This is called very early in
    _dl_sysdep_start.  */
 #define DL_PLATFORM_INIT dl_platform_init ()
@@ -258,12 +250,11 @@ elf_machine_plt_value (struct link_map *map, const ElfW(Rela) *reloc,
 /* Perform the relocation specified by RELOC and SYM (which is fully resolved).
    MAP is the object containing the reloc.  */
 
-auto inline void
-__attribute__ ((always_inline))
-elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
-		  const ElfW(Sym) *sym, const struct r_found_version *version,
-		  void *const reloc_addr_arg, int skip_ifunc)
-{
+static inline void __attribute__((always_inline))
+elf_machine_rela(struct link_map *map, struct r_scope_elem *scope[],
+		 const ElfW(Rela) *reloc, const ElfW(Sym) *sym,
+		 const struct r_found_version *version,
+		 void *const reloc_addr_arg, int skip_ifunc) {
   ElfW(Addr) *const reloc_addr = reloc_addr_arg;
   const unsigned long int r_type = ELFW(R_TYPE) (reloc->r_info);
 
@@ -300,7 +291,8 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
 # ifndef RTLD_BOOTSTRAP
       const ElfW(Sym) *const refsym = sym;
 # endif
-      struct link_map *sym_map = RESOLVE_MAP (&sym, version, r_type);
+      struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version,
+					      r_type);
       ElfW(Addr) value = SYMBOL_ADDRESS (sym_map, sym, true);
 
       if (sym != NULL
@@ -525,7 +517,7 @@ and creates an unsatisfiable circular dependency.\n",
     }
 }
 
-auto inline void
+static inline void
 __attribute ((always_inline))
 elf_machine_rela_relative (ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
 			   void *const reloc_addr_arg)
@@ -544,9 +536,9 @@ elf_machine_rela_relative (ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
     }
 }
 
-auto inline void
+static inline void
 __attribute ((always_inline))
-elf_machine_lazy_rel (struct link_map *map,
+elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
 		      ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
 		      int skip_ifunc)
 {
@@ -580,7 +572,7 @@ elf_machine_lazy_rel (struct link_map *map,
 
       /* Always initialize TLS descriptors completely at load time, in
 	 case static TLS is allocated for it that requires locking.  */
-      elf_machine_rela (map, reloc, sym, version, reloc_addr, skip_ifunc);
+      elf_machine_rela (map, scope, reloc, sym, version, reloc_addr, skip_ifunc);
     }
   else if (__glibc_unlikely (r_type == R_X86_64_IRELATIVE))
     {

@@ -1,5 +1,5 @@
 /* Run-time dynamic linker data structures for loaded ELF shared objects.
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -35,6 +35,7 @@
 #include <link.h>
 #include <dl-lookupcfg.h>
 #include <dl-sysdep.h>
+#include <dl-fixup-attribute.h>
 #include <libc-lock.h>
 #include <hp-timing.h>
 #include <tls.h>
@@ -69,17 +70,24 @@ __BEGIN_DECLS
    `ElfW(TYPE)' is used in place of `Elf32_TYPE' or `Elf64_TYPE'.  */
 #define ELFW(type)	_ElfW (ELF, __ELF_NATIVE_CLASS, type)
 
+/* Return true if dynamic section in the shared library L should be
+   relocated.  */
+
+static inline bool
+dl_relocate_ld (const struct link_map *l)
+{
+  /* Don't relocate dynamic section if it is readonly  */
+  return !(l->l_ld_readonly || DL_RO_DYN_SECTION);
+}
+
 /* All references to the value of l_info[DT_PLTGOT],
   l_info[DT_STRTAB], l_info[DT_SYMTAB], l_info[DT_RELA],
   l_info[DT_REL], l_info[DT_JMPREL], and l_info[VERSYMIDX (DT_VERSYM)]
   have to be accessed via the D_PTR macro.  The macro is needed since for
   most architectures the entry is already relocated - but for some not
   and we need to relocate at access time.  */
-#ifdef DL_RO_DYN_SECTION
-# define D_PTR(map, i) ((map)->i->d_un.d_ptr + (map)->l_addr)
-#else
-# define D_PTR(map, i) (map)->i->d_un.d_ptr
-#endif
+#define D_PTR(map, i) \
+  ((map)->i->d_un.d_ptr + (dl_relocate_ld (map) ? 0 : (map)->l_addr))
 
 /* Result of the lookup functions and how to retrieve the base address.  */
 typedef struct link_map *lookup_t;
@@ -238,6 +246,13 @@ enum allowmask
   };
 
 
+/* DSO sort algorithm to use (check dl-sort-maps.c).  */
+enum dso_sort_algorithm
+  {
+    dso_sort_algorithm_original,
+    dso_sort_algorithm_dfs
+  };
+
 struct audit_ifaces
 {
   void (*activity) (uintptr_t *, unsigned int);
@@ -355,7 +370,7 @@ struct rtld_global
       void (*free) (void *);
     } _ns_unique_sym_table;
     /* Keep track of changes to each namespace' list.  */
-    struct r_debug _ns_debug;
+    struct r_debug_extended _ns_debug;
   } _dl_ns[DL_NNS];
   /* One higher than index of last used namespace.  */
   EXTERN size_t _dl_nns;
@@ -372,6 +387,13 @@ struct rtld_global
      list of loaded objects while an object is added to or removed
      from that list.  */
   __rtld_lock_define_recursive (EXTERN, _dl_load_write_lock)
+  /* This lock protects global and module specific TLS related data.
+     E.g. it is held in dlopen and dlclose when GL(dl_tls_generation),
+     GL(dl_tls_max_dtv_idx) or GL(dl_tls_dtv_slotinfo_list) are
+     accessed and when TLS related relocations are processed for a
+     module.  It was introduced to keep pthread_create accessing TLS
+     state that is being set up.  */
+  __rtld_lock_define_recursive (EXTERN, _dl_load_tls_lock)
 
   /* Incremented whenever something may have been added to dl_loaded.  */
   EXTERN unsigned long long _dl_load_adds;
@@ -456,7 +478,7 @@ struct rtld_global
   /* Generation counter for the dtv.  */
   EXTERN size_t _dl_tls_generation;
 
-#if !THREAD_GSCOPE_IN_TCB
+#if !PTHREAD_IN_LIBC
   EXTERN void (*_dl_init_static_tls) (struct link_map *);
 #endif
 
@@ -466,7 +488,7 @@ struct rtld_global
     size_t count;
     void *list[50];
   } *_dl_scope_free_list;
-#if THREAD_GSCOPE_IN_TCB
+#if PTHREAD_IN_LIBC
   /* List of active thread stacks, with memory managed by glibc.  */
   EXTERN list_t _dl_stack_used;
 
@@ -487,7 +509,13 @@ struct rtld_global
   /* Mutex protecting the stack lists.  */
   EXTERN int _dl_stack_cache_lock;
 #else
-  EXTERN int _dl_thread_gscope_count;
+  /* The total number of thread IDs currently in use, or on the list of
+     available thread IDs.  */
+  EXTERN int _dl_pthread_num_threads;
+
+  /* Array of __pthread structures and its lock.  */
+  EXTERN struct __pthread **_dl_pthread_threads;
+  __libc_rwlock_define (EXTERN, _dl_pthread_threads_lock)
 #endif
 #ifdef SHARED
 };
@@ -658,6 +686,8 @@ struct rtld_global_ro
      platforms.  */
   EXTERN uint64_t _dl_hwcap2;
 
+  EXTERN enum dso_sort_algorithm _dl_dso_sort_algo;
+
 #ifdef SHARED
   /* We add a function table to _rtld_global which is then used to
      call the function instead of going through the PLT.  The result
@@ -683,6 +713,15 @@ struct rtld_global_ro
      namespace.  */
   void (*_dl_error_free) (void *);
   void *(*_dl_tls_get_addr_soft) (struct link_map *);
+
+  /* Called from __libc_shared to deallocate malloc'ed memory.  */
+  void (*_dl_libc_freeres) (void);
+
+  /* Implementation of _dl_find_object.  The public entry point is in
+     libc, and this is patched by __rtld_static_init to support static
+     dlopen.  */
+  int (*_dl_find_object) (void *, struct dl_find_object *);
+
 #ifdef HAVE_DL_DISCOVER_OSVERSION
   int (*_dl_discover_osversion) (void);
 #endif
@@ -1084,7 +1123,7 @@ extern void _dl_fini (void) attribute_hidden;
 
 /* Sort array MAPS according to dependencies of the contained objects.  */
 extern void _dl_sort_maps (struct link_map **maps, unsigned int nmaps,
-			   char *used, bool for_fini) attribute_hidden;
+			   unsigned int skip, bool for_fini) attribute_hidden;
 
 /* The dynamic linker calls this function before and having changing
    any shared object mappings.  The `r_state' member of `struct r_debug'
@@ -1093,11 +1132,15 @@ extern void _dl_sort_maps (struct link_map **maps, unsigned int nmaps,
 extern void _dl_debug_state (void);
 rtld_hidden_proto (_dl_debug_state)
 
-/* Initialize `struct r_debug' if it has not already been done.  The
-   argument is the run-time load address of the dynamic linker, to be put
-   in the `r_ldbase' member.  Returns the address of the structure.  */
+/* Initialize `struct r_debug_extended' for the namespace NS.  LDBASE
+   is the run-time load address of the dynamic linker, to be put in the
+   `r_ldbase' member.  Return the address of the structure.  */
 extern struct r_debug *_dl_debug_initialize (ElfW(Addr) ldbase, Lmid_t ns)
      attribute_hidden;
+
+/* Update the `r_map' member and return the address of `struct r_debug'
+   of the namespace NS.  */
+extern struct r_debug *_dl_debug_update (Lmid_t ns) attribute_hidden;
 
 /* Initialize the basic data structure for the search paths.  SOURCE
    is either "LD_LIBRARY_PATH" or "--library-path".
@@ -1211,6 +1254,18 @@ extern struct link_map * _dl_get_dl_main_map (void)
 # endif
 #endif
 
+/* Initialize the DSO sort algorithm to use.  */
+#if !HAVE_TUNABLES
+static inline void
+__always_inline
+_dl_sort_maps_init (void)
+{
+  /* This is optimized out if tunables are not enabled.  */
+}
+#else
+extern void _dl_sort_maps_init (void) attribute_hidden;
+#endif
+
 /* Initialization of libpthread for statically linked applications.
    If libpthread is not linked in, this is an empty function.  */
 void __pthread_initialize_minimal (void) weak_function;
@@ -1227,7 +1282,7 @@ extern void _dl_allocate_static_tls (struct link_map *map) attribute_hidden;
 /* These are internal entry points to the two halves of _dl_allocate_tls,
    only used within rtld.c itself at startup time.  */
 extern void *_dl_allocate_tls_storage (void) attribute_hidden;
-extern void *_dl_allocate_tls_init (void *);
+extern void *_dl_allocate_tls_init (void *, bool);
 rtld_hidden_proto (_dl_allocate_tls_init)
 
 /* Deallocate memory allocated with _dl_allocate_tls.  */
@@ -1261,7 +1316,7 @@ extern int _dl_scope_free (void *) attribute_hidden;
 
 /* Add module to slot information data.  If DO_ADD is false, only the
    required memory is allocated.  Must be called with GL
-   (dl_load_lock) acquired.  If the function has already been called
+   (dl_load_tls_lock) acquired.  If the function has already been called
    for the link map L with !do_add, then this function will not raise
    an exception, otherwise it is possible that it encounters a memory
    allocation failure.  */
@@ -1297,13 +1352,13 @@ extern void _dl_aux_init (ElfW(auxv_t) *av)
 
 /* Initialize the static TLS space for the link map in all existing
    threads. */
-#if THREAD_GSCOPE_IN_TCB
+#if PTHREAD_IN_LIBC
 void _dl_init_static_tls (struct link_map *map) attribute_hidden;
 #endif
 static inline void
 dl_init_static_tls (struct link_map *map)
 {
-#if THREAD_GSCOPE_IN_TCB
+#if PTHREAD_IN_LIBC
   /* The stack list is available to ld.so, so the initialization can
      be handled within ld.so directly.  */
   _dl_init_static_tls (map);
@@ -1346,6 +1401,57 @@ link_map_audit_state (struct link_map *l, size_t index)
       return &base[index];
     }
 }
+
+/* Call the la_objsearch from the audit modules from the link map L.  If
+   ORIGNAME is non NULL, it is updated with the revious name prior calling
+   la_objsearch.  */
+const char *_dl_audit_objsearch (const char *name, struct link_map *l,
+				 unsigned int code)
+   attribute_hidden;
+
+/* Call the la_activity from the audit modules from the link map L and issues
+   the ACTION argument.  */
+void _dl_audit_activity_map (struct link_map *l, int action)
+  attribute_hidden;
+
+/* Call the la_activity from the audit modules from the link map from the
+   namespace NSID and issues the ACTION argument.  */
+void _dl_audit_activity_nsid (Lmid_t nsid, int action)
+  attribute_hidden;
+
+/* Call the la_objopen from the audit modules for the link_map L on the
+   namespace identification NSID.  */
+void _dl_audit_objopen (struct link_map *l, Lmid_t nsid)
+  attribute_hidden;
+
+/* Call the la_objclose from the audit modules for the link_map L.  */
+void _dl_audit_objclose (struct link_map *l)
+  attribute_hidden;
+
+/* Call the la_preinit from the audit modules for the link_map L.  */
+void _dl_audit_preinit (struct link_map *l);
+
+/* Call the la_symbind{32,64} from the audit modules for the link_map L.  If
+   RELOC_RESULT is NULL it assumes the symbol to be bind-now and will set
+   the flags with LA_SYMB_NOPLTENTER | LA_SYMB_NOPLTEXIT prior calling
+   la_symbind{32,64}.  */
+void _dl_audit_symbind (struct link_map *l, struct reloc_result *reloc_result,
+			const ElfW(Sym) *defsym, DL_FIXUP_VALUE_TYPE *value,
+			lookup_t result)
+  attribute_hidden;
+/* Same as _dl_audit_symbind, but also sets LA_SYMB_DLSYM flag.  */
+void _dl_audit_symbind_alt (struct link_map *l, const ElfW(Sym) *ref,
+			    void **value, lookup_t result);
+rtld_hidden_proto (_dl_audit_symbind_alt)
+void _dl_audit_pltenter (struct link_map *l, struct reloc_result *reloc_result,
+			 DL_FIXUP_VALUE_TYPE *value, void *regs,
+			 long int *framesize)
+  attribute_hidden;
+void DL_ARCH_FIXUP_ATTRIBUTE _dl_audit_pltexit (struct link_map *l,
+						ElfW(Word) reloc_arg,
+						const void *inregs,
+						void *outregs)
+  attribute_hidden;
 #endif /* SHARED */
 
 #if PTHREAD_IN_LIBC && defined SHARED
@@ -1371,10 +1477,11 @@ __rtld_mutex_init (void)
 }
 #endif /* !PTHREAD_IN_LIBC */
 
-#if THREAD_GSCOPE_IN_TCB
+/* Implementation of GL (dl_libc_freeres).  */
+void __rtld_libc_freeres (void) attribute_hidden;
+
 void __thread_gscope_wait (void) attribute_hidden;
 # define THREAD_GSCOPE_WAIT() __thread_gscope_wait ()
-#endif
 
 __END_DECLS
 

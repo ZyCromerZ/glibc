@@ -1,4 +1,4 @@
-# Copyright (C) 1994-2021 Free Software Foundation, Inc.
+# Copyright (C) 1994-2022 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 
 # The GNU C Library is free software; you can redistribute it and/or
@@ -78,8 +78,12 @@ generate := mtrace-tst-leaks.out tst-leaks.mtrace tst-leaks2.mtrace
 
 extra-libs := libresolv libnss_dns
 ifeq ($(have-thread-library),yes)
-extra-libs += libanl
 routines += gai_sigqueue
+endif
+
+ifeq ($(have-GLIBC_2.34)$(have-thread-library),yesyes)
+# Empty compatibility library for old binaries.
+extra-libs += libanl
 
 tests += \
   tst-bug18665 \
@@ -175,6 +179,11 @@ $(libanl-routines-var) += \
 
 libanl-routines += libanl-compat
 libanl-shared-only-routines += libanl-compat
+
+# Pretend that libanl.so is a linker script, so that the symbolic link
+# is not installed.
+install-lib-ldscripts = libanl.so
+$(inst_libdir)/libanl.so:
 
 subdir-dirs = nss_dns
 vpath %.c nss_dns

@@ -1,5 +1,5 @@
 /* Optimized memmove for x86-64.
-   Copyright (C) 2016-2021 Free Software Foundation, Inc.
+   Copyright (C) 2016-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -25,7 +25,7 @@
 /* Use movups and movaps for smaller code sizes.  */
 #define VMOVU		movups
 #define VMOVA		movaps
-
+#define MOV_SIZE	3
 #define SECTION(p)		p
 
 #ifdef USE_MULTIARCH

@@ -1,5 +1,6 @@
 /* Malloc debug DSO.
-   Copyright (C) 2021 Free Software Foundation, Inc.
+   Copyright (C) 2021-2022 Free Software Foundation, Inc.
+   Copyright The GNU Toolchain Authors.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -23,7 +24,6 @@
 #include <unistd.h>
 #include <sys/param.h>
 
-#if SHLIB_COMPAT (libc_malloc_debug, GLIBC_2_0, GLIBC_2_34)
 /* Support only the glibc allocators.  */
 extern void *__libc_malloc (size_t);
 extern void __libc_free (void *);
@@ -399,17 +399,17 @@ strong_alias (__debug_calloc, calloc)
 size_t
 malloc_usable_size (void *mem)
 {
+  if (mem == NULL)
+    return 0;
+
   if (__is_malloc_debug_enabled (MALLOC_MCHECK_HOOK))
     return mcheck_usable_size (mem);
   if (__is_malloc_debug_enabled (MALLOC_CHECK_HOOK))
     return malloc_check_get_size (mem);
 
-  if (mem != NULL)
-    {
-      mchunkptr p = mem2chunk (mem);
-     if (DUMPED_MAIN_ARENA_CHUNK (p))
-       return chunksize (p) - SIZE_SZ;
-    }
+  mchunkptr p = mem2chunk (mem);
+  if (DUMPED_MAIN_ARENA_CHUNK (p))
+    return chunksize (p) - SIZE_SZ;
 
   return musable (mem);
 }
@@ -668,4 +668,3 @@ compat_symbol (libc_malloc_debug, __free_hook, __free_hook, GLIBC_2_0);
 compat_symbol (libc_malloc_debug, __malloc_hook, __malloc_hook, GLIBC_2_0);
 compat_symbol (libc_malloc_debug, __realloc_hook, __realloc_hook, GLIBC_2_0);
 compat_symbol (libc_malloc_debug, __memalign_hook, __memalign_hook, GLIBC_2_0);
-#endif

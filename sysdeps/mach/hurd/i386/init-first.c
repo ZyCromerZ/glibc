@@ -1,5 +1,5 @@
 /* Initialization code run first thing by the ELF startup code.  For i386/Hurd.
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -184,9 +184,6 @@ init (int *data)
       _dl_phnum = d->phdrsz / sizeof (ElfW(Phdr));
       assert (d->phdrsz % sizeof (ElfW(Phdr)) == 0);
     }
-
-  /* We need to setup TLS before initializing libpthread.  */
-  __libc_setup_tls ();
 #endif
 
   /* Call `init1' (above) with the user code as the return address, and the
@@ -245,7 +242,7 @@ first_init (void)
   /* Initialize data structures so we can do RPCs.  */
   __mach_init ();
 
-  RUN_HOOK (_hurd_preinit_hook, ());
+  RUN_RELHOOK (_hurd_preinit_hook, ());
 }
 
 #ifdef SHARED

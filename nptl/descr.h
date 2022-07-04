@@ -1,6 +1,5 @@
-/* Copyright (C) 2002-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
-   Contributed by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -35,9 +34,12 @@
 #include <bits/types/res_state.h>
 #include <kernel-features.h>
 #include <tls-internal-struct.h>
+#include <sys/rseq.h>
 
 #ifndef TCB_ALIGNMENT
-# define TCB_ALIGNMENT	sizeof (double)
+# define TCB_ALIGNMENT 32
+#elif TCB_ALIGNMENT < 32
+# error TCB_ALIGNMENT must be at least 32
 #endif
 
 
@@ -396,8 +398,17 @@ struct pthread
      PTHREAD_CANCEL_ASYNCHRONOUS).  */
   unsigned char canceltype;
 
+  /* Used in __pthread_kill_internal to detected a thread that has
+     exited or is about to exit.  exit_lock must only be acquired
+     after blocking signals.  */
+  bool exiting;
+  int exit_lock; /* A low-level lock (for use with __libc_lock_init etc).  */
+
   /* Used on strsignal.  */
   struct tls_internal_t tls_state;
+
+  /* rseq area registered with the kernel.  */
+  struct rseq rseq_area;
 
   /* This member must be last.  */
   char end_padding[];

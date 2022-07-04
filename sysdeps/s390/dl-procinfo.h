@@ -1,7 +1,6 @@
 /* s390 version of processor capability information handling macros.
-   Copyright (C) 2006-2021 Free Software Foundation, Inc.
+   Copyright (C) 2006-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
-   Contributed by Martin Schwidefsky <schwidefsky@de.ibm.com>, 2006.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -21,7 +20,7 @@
 #define _DL_PROCINFO_H	1
 #include <ldsodefs.h>
 
-#define _DL_HWCAP_COUNT 21
+#define _DL_HWCAP_COUNT 23
 
 #define _DL_PLATFORMS_COUNT	10
 
@@ -63,6 +62,8 @@ enum
   HWCAP_S390_DFLT = 1 << 18,
   HWCAP_S390_VXRS_PDE2 = 1 << 19,
   HWCAP_S390_NNPA = 1 << 20,
+  HWCAP_S390_PCI_MIO = 1 << 21,
+  HWCAP_S390_SIE = 1 << 22,
 };
 
 #define HWCAP_IMPORTANT (HWCAP_S390_ZARCH | HWCAP_S390_LDISP \

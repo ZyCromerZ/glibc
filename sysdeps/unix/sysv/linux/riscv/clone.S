@@ -1,5 +1,5 @@
 /* Wrapper around clone system call.  RISC-V version.
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -31,6 +31,9 @@
 
 	.text
 LEAF (__clone)
+
+	/* Align stack to a 128-bit boundary as per RISC-V ABI.  */
+	andi		a1,a1,ALMASK
 
 	/* Sanity check arguments.  */
 	beqz		a0,L (invalid)	/* No NULL function pointers.  */

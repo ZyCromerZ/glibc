@@ -1,6 +1,5 @@
 /* Machine-dependent ELF dynamic relocation inline functions.  PA-RISC version.
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
-   Contributed by David Huggins-Daines <dhd@debian.org>
+   Copyright (C) 1995-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -30,6 +29,8 @@
 #include <dl-fptr.h>
 #include <abort-instr.h>
 #include <tls.h>
+#include <dl-static-tls.h>
+#include <dl-machine-rel.h>
 
 /* These two definitions must match the definition of the stub in
    bfd/elf32-hppa.c (see plt_stub[]).
@@ -69,8 +70,8 @@ __hppa_init_bootstrap_fdesc_table (struct link_map *map)
   map->l_mach.fptr_table = boot_table;
 }
 
-#define ELF_MACHINE_BEFORE_RTLD_RELOC(dynamic_info)		\
-	__hppa_init_bootstrap_fdesc_table (BOOTSTRAP_MAP);	\
+#define ELF_MACHINE_BEFORE_RTLD_RELOC(map, dynamic_info)	\
+	__hppa_init_bootstrap_fdesc_table (map);		\
 	_dl_fptr_init();
 
 /* Return nonzero iff ELF header is compatible with the running host.  */
@@ -163,7 +164,8 @@ elf_machine_plt_value (struct link_map *map, const Elf32_Rela *reloc,
    entries will jump to the on-demand fixup code in dl-runtime.c.  */
 
 static inline int
-elf_machine_runtime_setup (struct link_map *l, int lazy, int profile)
+elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
+			   int lazy, int profile)
 {
   Elf32_Addr *got = NULL;
   Elf32_Addr l_addr, iplt, jmprel, end_jmprel, r_type, r_sym;
@@ -509,10 +511,6 @@ asm (									\
 #define ELF_MACHINE_JMP_SLOT R_PARISC_IPLT
 #define ELF_MACHINE_SIZEOF_JMP_SLOT PLT_ENTRY_SIZE
 
-/* We only use RELA. */
-#define ELF_MACHINE_NO_REL 1
-#define ELF_MACHINE_NO_RELA 0
-
 /* Return the address of the entry point. */
 #define ELF_MACHINE_START_ADDRESS(map, start)			\
 ({								\
@@ -549,8 +547,8 @@ dl_platform_init (void)
   (  (((as14) & 0x1fff) << 1) \
    | (((as14) & 0x2000) >> 13))
 
-auto void __attribute__((always_inline))
-elf_machine_rela (struct link_map *map,
+static void __attribute__((always_inline))
+elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
 		  const Elf32_Rela *reloc,
 		  const Elf32_Sym *sym,
 		  const struct r_found_version *version,
@@ -579,11 +577,9 @@ elf_machine_rela (struct link_map *map,
      zeros, and an all zero Elf32_Sym has a binding of STB_LOCAL.)
      See RESOLVE_MAP definition in elf/dl-reloc.c  */
 # ifdef RTLD_BOOTSTRAP
-  /* RESOLVE_MAP in rtld.c doesn't have the local sym test.  */
-  sym_map = (ELF32_ST_BIND (sym->st_info) != STB_LOCAL
-	     ? RESOLVE_MAP (&sym, version, r_type) : map);
+  sym_map = map;
 # else
-  sym_map = RESOLVE_MAP (&sym, version, r_type);
+  sym_map = RESOLVE_MAP (map, scope, &sym, version, r_type);
 # endif
 
   if (sym_map)
@@ -741,7 +737,7 @@ elf_machine_rela (struct link_map *map,
 
 /* hppa doesn't have an R_PARISC_RELATIVE reloc, but uses relocs with
    ELF32_R_SYM (info) == 0 for a similar purpose.  */
-auto void __attribute__((always_inline))
+static void __attribute__((always_inline))
 elf_machine_rela_relative (Elf32_Addr l_addr,
 			   const Elf32_Rela *reloc,
 			   void *const reloc_addr_arg)
@@ -794,8 +790,8 @@ elf_machine_rela_relative (Elf32_Addr l_addr,
   *reloc_addr = value;
 }
 
-auto void __attribute__((always_inline))
-elf_machine_lazy_rel (struct link_map *map,
+static void __attribute__((always_inline))
+elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
 		      Elf32_Addr l_addr, const Elf32_Rela *reloc,
 		      int skip_ifunc)
 {

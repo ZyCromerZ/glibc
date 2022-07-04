@@ -1,5 +1,5 @@
 /* Capture output from a subprocess.
-   Copyright (C) 2017-2021 Free Software Foundation, Inc.
+   Copyright (C) 2017-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -170,6 +170,7 @@ copy_and_spawn_sgid (char *child_id, gid_t gid)
      support_subprogram because we only want the program exit status, not the
      contents.  */
   ret = 0;
+  infd = outfd = -1;
 
   char * const args[] = {execname, child_id, NULL};
 

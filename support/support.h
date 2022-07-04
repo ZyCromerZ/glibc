@@ -1,5 +1,6 @@
 /* Common extra functions.
-   Copyright (C) 2016-2021 Free Software Foundation, Inc.
+   Copyright (C) 2016-2022 Free Software Foundation, Inc.
+   Copyright The GNU Toolchain Authors.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -73,6 +74,12 @@ void support_write_file_string (const char *path, const char *contents);
    the result).  */
 char *support_quote_blob (const void *blob, size_t length);
 
+/* Quote the contents of the wide character array starting at BLOB, of
+   LENGTH wide characters, in such a way that the result string can be
+   included in a C wide string literal (in single/double quotes,
+   without putting the quotes into the result).  */
+char *support_quote_blob_wide (const void *blob, size_t length);
+
 /* Quote the contents of the string, in such a way that the result
    string can be included in a C literal (in single/double quotes,
    without putting the quotes into the result).  */
@@ -98,8 +105,8 @@ extern void *xrealloc (void *o, size_t n)
 extern char *xstrdup (const char *) __attribute_malloc__ __attr_dealloc_free
   __returns_nonnull;
 void *xposix_memalign (size_t alignment, size_t n)
-  __attribute_malloc__ __attribute_alloc_size__ ((2)) __attr_dealloc_free
-  __returns_nonnull;
+  __attribute_malloc__ __attribute_alloc_align__ ((1))
+  __attribute_alloc_size__ ((2)) __attr_dealloc_free __returns_nonnull;
 char *xasprintf (const char *format, ...)
   __attribute__ ((format (printf, 1, 2), malloc)) __attr_dealloc_free
   __returns_nonnull;
@@ -152,6 +159,18 @@ static __inline bool support_path_support_time64 (const char *path)
 					    0x80000002ULL);
 }
 
+/* Return true if the setitimer and getitimer syscalls support 64-bit time_t
+   values without resulting in overflow.  This is not true on some linux systems
+   which have 64-bit time_t due to legacy kernel API's.  */
+static __inline bool support_itimer_support_time64 (void)
+{
+#ifdef __KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64
+  return __KERNEL_OLD_TIMEVAL_MATCHES_TIMEVAL64;
+#else
+  return sizeof (__time_t) == 8;
+#endif
+}
+
 /* Return true if stat supports nanoseconds resolution.  PATH is used
    for tests and its ctime may change.  */
 extern bool support_stat_nanoseconds (const char *path);
@@ -164,6 +183,10 @@ extern bool support_select_modifies_timeout (void);
    tv_usec larger than 1000000.  */
 extern bool support_select_normalizes_timeout (void);
 
+/* Return true if socket FD supports 64-bit timestamps with the SOL_SOCKET
+   and SO_TIMESTAMP/SO_TIMESTAMPNS.  */
+extern bool support_socket_so_timestamp_time64 (int fd);
+
 /* Create a timer that trigger after SEC seconds and NSEC nanoseconds.  If
    REPEAT is true the timer will repeat indefinitely.  If CALLBACK is not
    NULL, the function will be called when the timer expires; otherwise a
@@ -173,6 +196,10 @@ timer_t support_create_timer (uint64_t sec, long int nsec, bool repeat,
 			      void (*callback)(int));
 /* Disable the timer TIMER.  */
 void support_delete_timer (timer_t timer);
+
+/* Wait until all threads except the current thread have exited (as
+   far as the kernel is concerned).  */
+void support_wait_for_thread_exit (void);
 
 struct support_stack
 {
@@ -192,6 +219,14 @@ struct support_stack support_stack_alloc (size_t size);
 
 /* Deallocate the STACK.  */
 void support_stack_free (struct support_stack *stack);
+
+
+/* Create a range of NUM opened '/dev/null' file descriptors using FLAGS and
+   MODE.  The function takes care of restarting the open range if a file
+   descriptor is found within the specified range and also increases
+   RLIMIT_NOFILE if required.
+   The returned value is the lowest file descriptor number.  */
+int support_open_dev_null_range (int num, int flags, mode_t mode);
 
 __END_DECLS
 

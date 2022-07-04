@@ -1,6 +1,5 @@
-/* Copyright (C) 1999-2021 Free Software Foundation, Inc.
+/* Copyright (C) 1999-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
-   Contributed by Andreas Jaeger <aj@suse.de>, 1999.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published
@@ -329,7 +328,7 @@ print_version (FILE *stream, struct argp_state *state)
 Copyright (C) %s Free Software Foundation, Inc.\n\
 This is free software; see the source for copying conditions.  There is NO\n\
 warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
-"), "2021");
+"), "2022");
   fprintf (stream, gettext ("Written by %s.\n"),
 	   "Andreas Jaeger");
 }
@@ -338,7 +337,7 @@ warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\
    inode data from *ST.  */
 static struct dir_entry *
 new_sub_entry (const struct dir_entry *entry, const char *path,
-	       const struct stat64 *st)
+	       const struct stat *st)
 {
   struct dir_entry *new_entry = xmalloc (sizeof (struct dir_entry));
   new_entry->from_file = entry->from_file;
@@ -428,8 +427,8 @@ add_glibc_hwcaps_subdirectories (struct dir_entry *entry, const char *path)
 	    continue;
 
 	  /* See if this entry eventually resolves to a directory.  */
-	  struct stat64 st;
-	  if (fstatat64 (dirfd (dir), e->d_name, &st, 0) < 0)
+	  struct stat st;
+	  if (fstatat (dirfd (dir), e->d_name, &st, 0) < 0)
 	    /* Ignore unreadable entries.  */
 	    continue;
 
@@ -503,14 +502,18 @@ add_dir_1 (const char *line, const char *from_file, int from_line)
     entry->path[--i] = '\0';
 
   if (i == 0)
-    return;
+    {
+      free (entry->path);
+      free (entry);
+      return;
+    }
 
   char *path = entry->path;
   if (opt_chroot != NULL)
     path = chroot_canon (opt_chroot, path);
 
-  struct stat64 stat_buf;
-  if (path == NULL || stat64 (path, &stat_buf))
+  struct stat stat_buf;
+  if (path == NULL || stat (path, &stat_buf))
     {
       if (opt_verbose)
 	error (0, errno, _("Can't stat %s"), entry->path);
@@ -538,15 +541,15 @@ add_dir (const char *line)
 }
 
 static int
-chroot_stat (const char *real_path, const char *path, struct stat64 *st)
+chroot_stat (const char *real_path, const char *path, struct stat *st)
 {
   int ret;
   char *canon_path;
 
   if (!opt_chroot)
-    return stat64 (real_path, st);
+    return stat (real_path, st);
 
-  ret = lstat64 (real_path, st);
+  ret = lstat (real_path, st);
   if (ret || !S_ISLNK (st->st_mode))
     return ret;
 
@@ -554,7 +557,7 @@ chroot_stat (const char *real_path, const char *path, struct stat64 *st)
   if (canon_path == NULL)
     return -1;
 
-  ret = stat64 (canon_path, st);
+  ret = stat (canon_path, st);
   free (canon_path);
   return ret;
 }
@@ -566,7 +569,7 @@ create_links (const char *real_path, const char *path, const char *libname,
 {
   char *full_libname, *full_soname;
   char *real_full_libname, *real_full_soname;
-  struct stat64 stat_lib, stat_so, lstat_so;
+  struct stat stat_lib, stat_so, lstat_so;
   int do_link = 1;
   int do_remove = 1;
   /* XXX: The logics in this function should be simplified.  */
@@ -601,7 +604,7 @@ create_links (const char *real_path, const char *path, const char *libname,
 	  && stat_lib.st_ino == stat_so.st_ino)
 	/* Link is already correct.  */
 	do_link = 0;
-      else if (lstat64 (full_soname, &lstat_so) == 0
+      else if (lstat (full_soname, &lstat_so) == 0
 	       && !S_ISLNK (lstat_so.st_mode))
 	{
 	  error (0, 0, _("%s is not a symbolic link\n"), full_soname);
@@ -609,7 +612,7 @@ create_links (const char *real_path, const char *path, const char *libname,
 	  do_remove = 0;
 	}
     }
-  else if (lstat64 (real_full_soname, &lstat_so) != 0
+  else if (lstat (real_full_soname, &lstat_so) != 0
 	   || !S_ISLNK (lstat_so.st_mode))
     /* Unless it is a stale symlink, there is no need to remove.  */
     do_remove = 0;
@@ -653,7 +656,7 @@ manual_link (char *library)
   char *real_library;
   char *libname;
   char *soname;
-  struct stat64 stat_buf;
+  struct stat stat_buf;
   int flag;
   unsigned int osversion;
   unsigned int isa_level;
@@ -707,7 +710,7 @@ manual_link (char *library)
     }
 
   /* Do some sanity checks first.  */
-  if (lstat64 (real_library, &stat_buf))
+  if (lstat (real_library, &stat_buf))
     {
       error (0, errno, _("Cannot lstat %s"), library);
       goto out;
@@ -732,9 +735,9 @@ manual_link (char *library)
   create_links (real_path, path, libname, soname);
   free (soname);
 out:
-  free (path);
   if (path != real_path)
     free (real_path);
+  free (path);
 }
 
 
@@ -882,18 +885,18 @@ search_dir (const struct dir_entry *entry)
 	  sprintf (real_file_name, "%s/%s", dir_name, direntry->d_name);
 	}
 
-      struct stat64 lstat_buf;
+      struct stat lstat_buf;
       /* We optimize and try to do the lstat call only if needed.  */
       if (direntry->d_type != DT_UNKNOWN)
 	lstat_buf.st_mode = DTTOIF (direntry->d_type);
       else
-	if (__glibc_unlikely (lstat64 (real_file_name, &lstat_buf)))
+	if (__glibc_unlikely (lstat (real_file_name, &lstat_buf)))
 	  {
 	    error (0, errno, _("Cannot lstat %s"), file_name);
 	    continue;
 	  }
 
-      struct stat64 stat_buf;
+      struct stat stat_buf;
       bool is_dir;
       int is_link = S_ISLNK (lstat_buf.st_mode);
       if (is_link)
@@ -911,7 +914,7 @@ search_dir (const struct dir_entry *entry)
 		  continue;
 		}
 	    }
-	  if (__glibc_unlikely (stat64 (target_name, &stat_buf)))
+	  if (__glibc_unlikely (stat (target_name, &stat_buf)))
 	    {
 	      if (opt_verbose)
 		error (0, errno, _("Cannot stat %s"), file_name);
@@ -947,7 +950,7 @@ search_dir (const struct dir_entry *entry)
 	{
 	  if (!is_link
 	      && direntry->d_type != DT_UNKNOWN
-	      && __builtin_expect (lstat64 (real_file_name, &lstat_buf), 0))
+	      && __builtin_expect (lstat (real_file_name, &lstat_buf), 0))
 	    {
 	      error (0, errno, _("Cannot lstat %s"), file_name);
 	      continue;
@@ -976,10 +979,10 @@ search_dir (const struct dir_entry *entry)
       else
 	real_name = real_file_name;
 
-      /* Call lstat64 if not done yet.  */
+      /* Call lstat if not done yet.  */
       if (!is_link
 	  && direntry->d_type != DT_UNKNOWN
-	  && __builtin_expect (lstat64 (real_file_name, &lstat_buf), 0))
+	  && __builtin_expect (lstat (real_file_name, &lstat_buf), 0))
 	{
 	  error (0, errno, _("Cannot lstat %s"), file_name);
 	  continue;

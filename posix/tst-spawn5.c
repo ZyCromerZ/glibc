@@ -1,5 +1,5 @@
 /* Tests for posix_spawn signal handling.
-   Copyright (C) 2021 Free Software Foundation, Inc.
+   Copyright (C) 2021-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -46,17 +46,6 @@ static int initial_argv_count;
   { "restart", no_argument, &restart, 1 },
 
 #define NFDS 100
-
-static int
-open_multiple_temp_files (void)
-{
-  /* Check if the temporary file descriptor has no no gaps.  */
-  int lowfd = xopen ("/dev/null", O_RDONLY, 0600);
-  for (int i = 1; i <= NFDS; i++)
-    TEST_COMPARE (xopen ("/dev/null", O_RDONLY, 0600),
-		  lowfd + i);
-  return lowfd;
-}
 
 static int
 parse_fd (const char *str)
@@ -185,7 +174,7 @@ spawn_closefrom_test (posix_spawn_file_actions_t *fa, int lowfd, int highfd,
 static void
 do_test_closefrom (void)
 {
-  int lowfd = open_multiple_temp_files ();
+  int lowfd = support_open_dev_null_range (NFDS, O_RDONLY, 0600);
   const int half_fd = lowfd + NFDS / 2;
 
   /* Close half of the descriptors and check result.  */

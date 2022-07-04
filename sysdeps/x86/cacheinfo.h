@@ -1,5 +1,5 @@
 /* x86 cache info.
-   Copyright (C) 2020-2021 Free Software Foundation, Inc.
+   Copyright (C) 2020-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -61,14 +61,20 @@ init_cacheinfo (void)
   long int data = cpu_features->data_cache_size;
   /* Round data cache size to multiple of 256 bytes.  */
   data = data & ~255L;
-  __x86_data_cache_size_half = data / 2;
-  __x86_data_cache_size = data;
+  if (data > 0)
+    {
+      __x86_data_cache_size_half = data / 2;
+      __x86_data_cache_size = data;
+    }
 
   long int shared = cpu_features->shared_cache_size;
   /* Round shared cache size to multiple of 256 bytes.  */
   shared = shared & ~255L;
-  __x86_shared_cache_size_half = shared / 2;
-  __x86_shared_cache_size = shared;
+  if (shared > 0)
+    {
+      __x86_shared_cache_size_half = shared / 2;
+      __x86_shared_cache_size = shared;
+    }
 
   __x86_shared_non_temporal_threshold
     = cpu_features->non_temporal_threshold;

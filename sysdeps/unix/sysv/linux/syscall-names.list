@@ -1,5 +1,5 @@
 # List of all known Linux system calls.
-# Copyright (C) 2017-2021 Free Software Foundation, Inc.
+# Copyright (C) 2017-2022 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 #
 # The GNU C Library is free software; you can redistribute it and/or
@@ -21,8 +21,8 @@
 # This file can list all potential system calls.  The names are only
 # used if the installed kernel headers also provide them.
 
-# The list of system calls is current as of Linux 5.13.
-kernel 5.13
+# The list of system calls is current as of Linux 5.16.
+kernel 5.16
 
 FAST_atomic_update
 FAST_cmpxchg
@@ -146,6 +146,7 @@ ftruncate
 ftruncate64
 futex
 futex_time64
+futex_waitv
 futimesat
 get_kernel_syms
 get_mempolicy
@@ -247,6 +248,7 @@ madvise
 mbind
 membarrier
 memfd_create
+memfd_secret
 memory_ordering
 migrate_pages
 mincore
@@ -303,6 +305,7 @@ open_by_handle_at
 open_tree
 openat
 openat2
+or1k_atomic
 osf_adjtime
 osf_afs_syscall
 osf_alt_plock
@@ -439,6 +442,7 @@ preadv
 preadv2
 prlimit64
 process_madvise
+process_mrelease
 process_vm_readv
 process_vm_writev
 prof
@@ -452,6 +456,7 @@ pwritev
 pwritev2
 query_module
 quotactl
+quotactl_fd
 read
 readahead
 readdir

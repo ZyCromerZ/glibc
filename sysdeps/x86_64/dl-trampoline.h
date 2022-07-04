@@ -1,5 +1,5 @@
 /* PLT trampolines.  x86-64 version.
-   Copyright (C) 2009-2021 Free Software Foundation, Inc.
+   Copyright (C) 2009-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -149,8 +149,6 @@ _dl_runtime_resolve:
 	# Adjust stack(PLT did 2 pushes)
 	add $(LOCAL_STORAGE_AREA + 16), %RSP_LP
 	cfi_adjust_cfa_offset(-(LOCAL_STORAGE_AREA + 16))
-	# Preserve bound registers.
-	PRESERVE_BND_REGS_PREFIX
 	jmp *%r11		# Jump to function address.
 	cfi_endproc
 	.size _dl_runtime_resolve, .-_dl_runtime_resolve
@@ -229,20 +227,6 @@ _dl_runtime_profile:
 	movaps %xmm5, (LR_XMM_OFFSET + XMM_SIZE*5)(%rsp)
 	movaps %xmm6, (LR_XMM_OFFSET + XMM_SIZE*6)(%rsp)
 	movaps %xmm7, (LR_XMM_OFFSET + XMM_SIZE*7)(%rsp)
-
-# ifndef __ILP32__
-#  ifdef HAVE_MPX_SUPPORT
-	bndmov %bnd0, 		   (LR_BND_OFFSET)(%rsp)  # Preserve bound
-	bndmov %bnd1, (LR_BND_OFFSET +   BND_SIZE)(%rsp)  # registers. Nops if
-	bndmov %bnd2, (LR_BND_OFFSET + BND_SIZE*2)(%rsp)  # MPX not available
-	bndmov %bnd3, (LR_BND_OFFSET + BND_SIZE*3)(%rsp)  # or disabled.
-#  else
-	.byte 0x66,0x0f,0x1b,0x84,0x24;.long (LR_BND_OFFSET)
-	.byte 0x66,0x0f,0x1b,0x8c,0x24;.long (LR_BND_OFFSET + BND_SIZE)
-	.byte 0x66,0x0f,0x1b,0x94,0x24;.long (LR_BND_OFFSET + BND_SIZE*2)
-	.byte 0x66,0x0f,0x1b,0x9c,0x24;.long (LR_BND_OFFSET + BND_SIZE*3)
-#  endif
-# endif
 
 # ifdef RESTORE_AVX
 	/* This is to support AVX audit modules.  */
@@ -368,27 +352,12 @@ _dl_runtime_profile:
 1:
 # endif
 
-# ifndef __ILP32__
-#  ifdef HAVE_MPX_SUPPORT
-	bndmov              (LR_BND_OFFSET)(%rsp), %bnd0  # Restore bound
-	bndmov (LR_BND_OFFSET +   BND_SIZE)(%rsp), %bnd1  # registers.
-	bndmov (LR_BND_OFFSET + BND_SIZE*2)(%rsp), %bnd2
-	bndmov (LR_BND_OFFSET + BND_SIZE*3)(%rsp), %bnd3
-#  else
-	.byte 0x66,0x0f,0x1a,0x84,0x24;.long (LR_BND_OFFSET)
-	.byte 0x66,0x0f,0x1a,0x8c,0x24;.long (LR_BND_OFFSET + BND_SIZE)
-	.byte 0x66,0x0f,0x1a,0x94,0x24;.long (LR_BND_OFFSET + BND_SIZE*2)
-	.byte 0x66,0x0f,0x1a,0x9c,0x24;.long (LR_BND_OFFSET + BND_SIZE*3)
-#  endif
-# endif
-
 	mov  16(%rbx), %R10_LP	# Anything in framesize?
 	test %R10_LP, %R10_LP
-	PRESERVE_BND_REGS_PREFIX
 	jns 3f
 
 	/* There's nothing in the frame size, so there
-	   will be no call to the _dl_call_pltexit. */
+	   will be no call to the _dl_audit_pltexit. */
 
 	/* Get back registers content.  */
 	movq LR_RCX_OFFSET(%rsp), %rcx
@@ -403,7 +372,6 @@ _dl_runtime_profile:
 	add $48, %RSP_LP	# Adjust the stack to the return value
 				# (eats the reloc index and link_map)
 	cfi_adjust_cfa_offset(-48)
-	PRESERVE_BND_REGS_PREFIX
 	jmp *%r11		# Jump to function address.
 
 3:
@@ -430,13 +398,12 @@ _dl_runtime_profile:
 	movq 32(%rdi), %rsi
 	movq 40(%rdi), %rdi
 
-	PRESERVE_BND_REGS_PREFIX
 	call *%r11
 
 	mov 24(%rbx), %RSP_LP	# Drop the copied stack content
 
 	/* Now we have to prepare the La_x86_64_retval structure for the
-	   _dl_call_pltexit.  The La_x86_64_regs is being pointed by rsp now,
+	   _dl_audit_pltexit.  The La_x86_64_regs is being pointed by rsp now,
 	   so we just need to allocate the sizeof(La_x86_64_retval) space on
 	   the stack, since the alignment has already been taken care of. */
 # ifdef RESTORE_AVX
@@ -475,23 +442,13 @@ _dl_runtime_profile:
 	vmovdqa %xmm1, (LRV_SIZE + XMM_SIZE)(%rcx)
 # endif
 
-# ifndef __ILP32__
-#  ifdef HAVE_MPX_SUPPORT
-	bndmov %bnd0, LRV_BND0_OFFSET(%rcx)  # Preserve returned bounds.
-	bndmov %bnd1, LRV_BND1_OFFSET(%rcx)
-#  else
-	.byte  0x66,0x0f,0x1b,0x81;.long (LRV_BND0_OFFSET)
-	.byte  0x66,0x0f,0x1b,0x89;.long (LRV_BND1_OFFSET)
-#  endif
-# endif
-
 	fstpt LRV_ST0_OFFSET(%rcx)
 	fstpt LRV_ST1_OFFSET(%rcx)
 
 	movq 24(%rbx), %rdx	# La_x86_64_regs argument to %rdx.
 	movq 40(%rbx), %rsi	# Copy args pushed by PLT in register.
 	movq 32(%rbx), %rdi	# %rdi: link_map, %rsi: reloc_index
-	call _dl_call_pltexit
+	call _dl_audit_pltexit
 
 	/* Restore return registers.  */
 	movq LRV_RAX_OFFSET(%rsp), %rax
@@ -517,16 +474,6 @@ _dl_runtime_profile:
 1:
 # endif
 
-# ifndef __ILP32__
-#  ifdef HAVE_MPX_SUPPORT
-	bndmov LRV_BND0_OFFSET(%rsp), %bnd0  # Restore bound registers.
-	bndmov LRV_BND1_OFFSET(%rsp), %bnd1
-#  else
-	.byte  0x66,0x0f,0x1a,0x84,0x24;.long (LRV_BND0_OFFSET)
-	.byte  0x66,0x0f,0x1a,0x8c,0x24;.long (LRV_BND1_OFFSET)
-#  endif
-# endif
-
 	fldt LRV_ST1_OFFSET(%rsp)
 	fldt LRV_ST0_OFFSET(%rsp)
 
@@ -538,7 +485,6 @@ _dl_runtime_profile:
 	add $48, %RSP_LP	# Adjust the stack to the return value
 				# (eats the reloc index and link_map)
 	cfi_adjust_cfa_offset(-48)
-	PRESERVE_BND_REGS_PREFIX
 	retq
 
 	cfi_endproc

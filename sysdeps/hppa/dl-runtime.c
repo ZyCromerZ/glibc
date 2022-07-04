@@ -1,5 +1,5 @@
 /* On-demand PLT fixup for shared objects.  HPPA version.
-   Copyright (C) 2019-2021 Free Software Foundation, Inc.
+   Copyright (C) 2019-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -26,7 +26,7 @@
    _dl_fixup with the relocation offset.  */
 
 ElfW(Word)
-attribute_hidden __attribute ((noinline)) ARCH_FIXUP_ATTRIBUTE
+attribute_hidden __attribute ((noinline)) DL_ARCH_FIXUP_ATTRIBUTE
 _dl_fix_reloc_arg (struct fdesc *fptr, struct link_map *l)
 {
   Elf32_Addr l_addr, iplt, jmprel, end_jmprel, r_type;

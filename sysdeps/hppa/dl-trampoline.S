@@ -1,5 +1,5 @@
 /* PLT trampolines. hppa version.
-   Copyright (C) 2005-2021 Free Software Foundation, Inc.
+   Copyright (C) 2005-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -300,7 +300,7 @@ L(cont):
 	ldw	-4(%sp),%r1
 	copy	%r1, %sp
 
-	/* Arguments to _dl_call_pltexit */
+	/* Arguments to _dl_audit_pltexit */
 	ldw	-116(%sp), %r26		/* (1) got[1] == struct link_map */
 	ldw	-120(%sp), %r25		/* (2) reloc offsets */
 	ldo	-56(%sp), %r24		/* (3) *La_hppa_regs */
@@ -312,8 +312,8 @@ L(cont):
 	ldo	-128(%sp), %r1
 	fstd	%fr4,0(%r1)
 
-	/* Call _dl_call_pltexit */
-	bl	_dl_call_pltexit,%rp
+	/* Call _dl_audit_pltexit */
+	bl	_dl_audit_pltexit,%rp
 	nop
 
 	/* Restore *La_hppa_retval */

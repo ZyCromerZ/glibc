@@ -131,9 +131,10 @@ defined.  The default set of features includes these constants.
 @xref{Feature Test Macros}.
 
 All values are of type @code{double}.  As an extension, @theglibc{}
-also defines these constants with type @code{long double}.  The
-@code{long double} macros have a lowercase @samp{l} appended to their
-names: @code{M_El}, @code{M_PIl}, and so forth.  These are only
+also defines these constants with type @code{long double} and
+@code{float}.  The @code{long double} macros have a lowercase @samp{l}
+while the @code{float} macros have a lowercase @samp{f} appended to
+their names: @code{M_El}, @code{M_PIl}, and so forth.  These are only
 available if @code{_GNU_SOURCE} is defined.
 
 Likewise, @theglibc{} also defines these constants with the types
@@ -1394,8 +1395,9 @@ The table lists the ULP values for different architectures.  Different
 architectures have different results since their hardware support for
 floating-point operations varies and also the existing hardware support
 is different.  Only the round-to-nearest rounding mode is covered by
-this table, and vector versions of functions are not covered.
-Functions not listed do not have known errors.
+this table.  Functions not listed do not have known errors.  Vector
+versions of functions in the x86_64 libmvec library have a maximum error
+of 4 ulps.
 
 @page
 @c This multitable does not fit on a single page

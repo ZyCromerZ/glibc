@@ -1,5 +1,5 @@
 /* Machine-dependent ELF dynamic relocation inline functions.  RISC-V version.
-   Copyright (C) 2011-2021 Free Software Foundation, Inc.
+   Copyright (C) 2011-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -26,6 +26,8 @@
 #include <sys/asm.h>
 #include <dl-tls.h>
 #include <dl-irel.h>
+#include <dl-static-tls.h>
+#include <dl-machine-rel.h>
 
 #ifndef _RTLD_PROLOGUE
 # define _RTLD_PROLOGUE(entry)						\
@@ -51,9 +53,6 @@
      || (__WORDSIZE == 64 && (type) == R_RISCV_TLS_TPREL64)))	\
    | (ELF_RTYPE_CLASS_COPY * ((type) == R_RISCV_COPY)))
 
-#define ELF_MACHINE_NO_REL 1
-#define ELF_MACHINE_NO_RELA 0
-
 /* Return nonzero iff ELF header is compatible with the running host.  */
 static inline int __attribute_used__
 elf_machine_matches_host (const ElfW(Ehdr) *ehdr)
@@ -76,26 +75,25 @@ elf_machine_matches_host (const ElfW(Ehdr) *ehdr)
   return 1;
 }
 
+/* Return the run-time load address of the shared object.  */
+static inline ElfW(Addr)
+elf_machine_load_address (void)
+{
+  extern const ElfW(Ehdr) __ehdr_start attribute_hidden;
+  return (ElfW(Addr)) &__ehdr_start;
+}
+
 /* Return the link-time address of _DYNAMIC.  */
 static inline ElfW(Addr)
 elf_machine_dynamic (void)
 {
-  extern ElfW(Addr) _GLOBAL_OFFSET_TABLE_ __attribute__ ((visibility ("hidden")));
-  return _GLOBAL_OFFSET_TABLE_;
+  extern ElfW(Dyn) _DYNAMIC[] attribute_hidden;
+  return (ElfW(Addr)) _DYNAMIC - elf_machine_load_address ();
 }
 
 #define STRINGXP(X) __STRING (X)
 #define STRINGXV(X) STRINGV_ (X)
 #define STRINGV_(...) # __VA_ARGS__
-
-/* Return the run-time load address of the shared object.  */
-static inline ElfW(Addr)
-elf_machine_load_address (void)
-{
-  ElfW(Addr) load_addr;
-  asm ("lla %0, _DYNAMIC" : "=r" (load_addr));
-  return load_addr - elf_machine_dynamic ();
-}
 
 /* Initial entry point code for the dynamic linker.
    The C function `_dl_start' is the real entry point;
@@ -127,8 +125,14 @@ elf_machine_load_address (void)
 	sll a3, a1, " STRINGXP (PTRLOG) "\n\
 	add a3, a3, a2\n\
 	add a3, a3, " STRINGXP (SZREG) "\n\
+	# Stash the stack pointer in s1.\n\
+	mv s1, sp\n\
+	# Align stack to 128 bits for the _dl_init call.\n\
+	andi sp, sp,-16\n\
 	# Call the function to run the initializers.\n\
 	jal _dl_init\n\
+	# Restore the stack pointer for _start.\n\
+	mv sp, s1\n\
 	# Pass our finalizer function to _start.\n\
 	lla a0, _dl_fini\n\
 	# Jump to the user entry point.\n\
@@ -162,17 +166,18 @@ elf_machine_fixup_plt (struct link_map *map, lookup_t t,
    by RELOC_ADDR.  SYM is the relocation symbol specified by R_INFO and
    MAP is the object containing the reloc.  */
 
-auto inline void
+static inline void
 __attribute__ ((always_inline))
-elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
-		  const ElfW(Sym) *sym, const struct r_found_version *version,
+elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
+		  const ElfW(Rela) *reloc, const ElfW(Sym) *sym,
+		  const struct r_found_version *version,
 		  void *const reloc_addr, int skip_ifunc)
 {
   ElfW(Addr) r_info = reloc->r_info;
   const unsigned long int r_type = ELFW (R_TYPE) (r_info);
   ElfW(Addr) *addr_field = (ElfW(Addr) *) reloc_addr;
   const ElfW(Sym) *const __attribute__ ((unused)) refsym = sym;
-  struct link_map *sym_map = RESOLVE_MAP (&sym, version, r_type);
+  struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version, r_type);
   ElfW(Addr) value = 0;
   if (sym_map != NULL)
     value = SYMBOL_ADDRESS (sym_map, sym, true) + reloc->r_addend;
@@ -280,7 +285,7 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
     }
 }
 
-auto inline void
+static inline void
 __attribute__ ((always_inline))
 elf_machine_rela_relative (ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
 			  void *const reloc_addr)
@@ -288,10 +293,11 @@ elf_machine_rela_relative (ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
   *(ElfW(Addr) *) reloc_addr = l_addr + reloc->r_addend;
 }
 
-auto inline void
+static inline void
 __attribute__ ((always_inline))
-elf_machine_lazy_rel (struct link_map *map, ElfW(Addr) l_addr,
-		      const ElfW(Rela) *reloc, int skip_ifunc)
+elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
+		      ElfW(Addr) l_addr, const ElfW(Rela) *reloc,
+		      int skip_ifunc)
 {
   ElfW(Addr) *const reloc_addr = (void *) (l_addr + reloc->r_offset);
   const unsigned int r_type = ELFW (R_TYPE) (reloc->r_info);
@@ -321,9 +327,10 @@ elf_machine_lazy_rel (struct link_map *map, ElfW(Addr) l_addr,
 /* Set up the loaded object described by L so its stub function
    will jump to the on-demand fixup code __dl_runtime_resolve.  */
 
-auto inline int
+static inline int
 __attribute__ ((always_inline))
-elf_machine_runtime_setup (struct link_map *l, int lazy, int profile)
+elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
+			   int lazy, int profile)
 {
 #ifndef RTLD_BOOTSTRAP
   /* If using PLTs, fill in the first two entries of .got.plt.  */

@@ -1,5 +1,5 @@
 /* fork - create a child process.
-   Copyright (C) 1991-2021 Free Software Foundation, Inc.
+   Copyright (C) 1991-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -98,6 +98,9 @@ __libc_fork (void)
 
       /* Reset the lock the dynamic loader uses to protect its data.  */
       __rtld_lock_initialize (GL(dl_load_lock));
+
+      /* Reset the lock protecting dynamic TLS related data.  */
+      __rtld_lock_initialize (GL(dl_load_tls_lock));
 
       reclaim_stacks ();
 

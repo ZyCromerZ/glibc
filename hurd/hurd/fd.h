@@ -1,5 +1,5 @@
 /* File descriptors.
-   Copyright (C) 1993-2021 Free Software Foundation, Inc.
+   Copyright (C) 1993-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -295,9 +295,15 @@ __hurd_at_flags (int *at_flags, int *flags)
 
   *flags |= (*at_flags & AT_SYMLINK_NOFOLLOW) ? O_NOLINK : 0;
   *at_flags &= ~AT_SYMLINK_NOFOLLOW;
+
   if (*at_flags & AT_SYMLINK_FOLLOW)
     *flags &= ~O_NOLINK;
   *at_flags &= ~AT_SYMLINK_FOLLOW;
+
+  if (*at_flags & AT_NO_AUTOMOUNT)
+    *flags |= O_NOTRANS;
+  *at_flags &= ~AT_NO_AUTOMOUNT;
+
   if (*at_flags != 0)
     return EINVAL;
 

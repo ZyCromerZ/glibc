@@ -1,7 +1,6 @@
 /* Data for s390 version of processor capability information.
-   Copyright (C) 2006-2021 Free Software Foundation, Inc.
+   Copyright (C) 2006-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
-   Contributed by Martin Schwidefsky <schwidefsky@de.ibm.com>, 2006.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -46,13 +45,13 @@
 #if !defined PROCINFO_DECL && defined SHARED
   ._dl_s390_cap_flags
 #else
-PROCINFO_CLASS const char _dl_s390_cap_flags[21][9]
+PROCINFO_CLASS const char _dl_s390_cap_flags[23][9]
 #endif
 #ifndef PROCINFO_DECL
 = {
      "esan3", "zarch", "stfle", "msa", "ldisp", "eimm", "dfp", "edat", "etf3eh",
      "highgprs", "te", "vx", "vxd", "vxe", "gs", "vxe2", "vxp", "sort", "dflt",
-     "vxp2", "nnpa"
+     "vxp2", "nnpa", "pcimio", "sie"
   }
 #endif
 #if !defined SHARED || defined PROCINFO_DECL

@@ -1,4 +1,4 @@
-# Copyright (C) 1997-2021 Free Software Foundation, Inc.
+# Copyright (C) 1997-2022 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 
 # The GNU C Library is free software; you can redistribute it and/or
@@ -74,6 +74,7 @@ tests := tst-shm tst-timer tst-timer2 \
 	 tst-aio7 tst-aio8 tst-aio9 tst-aio10 \
 	 tst-mqueue1 tst-mqueue2 tst-mqueue3 tst-mqueue4 \
 	 tst-mqueue5 tst-mqueue6 tst-mqueue7 tst-mqueue8 tst-mqueue9 \
+	 tst-bz28213 \
 	 tst-timer3 tst-timer4 tst-timer5 \
 	 tst-cpuclock2 tst-cputimer1 tst-cputimer2 tst-cputimer3 \
 	 tst-shm-cancel \

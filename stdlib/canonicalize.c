@@ -1,5 +1,5 @@
 /* Return the canonical absolute name of a given file.
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -400,8 +400,16 @@ realpath_stk (const char *name, char *resolved,
 
 error:
   *dest++ = '\0';
-  if (resolved != NULL && dest - rname <= get_path_max ())
-    rname = strcpy (resolved, rname);
+  if (resolved != NULL)
+    {
+      if (dest - rname <= get_path_max ())
+	rname = strcpy (resolved, rname);
+      else if (!failed)
+	{
+	  failed = true;
+	  __set_errno (ENAMETOOLONG);
+	}
+    }
 
 error_nomem:
   scratch_buffer_free (&extra_buffer);

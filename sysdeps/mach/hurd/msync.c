@@ -1,5 +1,5 @@
 /* msync -- Synchronize mapped memory to external storage.  Mach version.
-   Copyright (C) 2002-2021 Free Software Foundation, Inc.
+   Copyright (C) 2002-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -46,9 +46,6 @@ msync (void *addr, size_t length, int flags)
 
   kern_return_t err;
   int cancel_oldtype;
-
-  if (flags & (MS_SYNC | MS_ASYNC) == (MS_SYNC | MS_ASYNC))
-    return __hurd_fail (EINVAL);
 
   while (cur < target)
     {

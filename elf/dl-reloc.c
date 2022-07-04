@@ -1,5 +1,5 @@
 /* Relocate a shared object and resolve its references to other loaded objects.
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -141,7 +141,7 @@ cannot allocate memory in static TLS block"));
     }
 }
 
-#if !THREAD_GSCOPE_IN_TCB
+#if !PTHREAD_IN_LIBC
 /* Initialize static TLS area and DTV for current (only) thread.
    libpthread implementations should provide their own hook
    to handle all threads.  */
@@ -160,7 +160,33 @@ _dl_nothread_init_static_tls (struct link_map *map)
   memset (__mempcpy (dest, map->l_tls_initimage, map->l_tls_initimage_size),
 	  '\0', map->l_tls_blocksize - map->l_tls_initimage_size);
 }
-#endif /* !THREAD_GSCOPE_IN_TCB */
+#endif /* !PTHREAD_IN_LIBC */
+
+/* This macro is used as a callback from the ELF_DYNAMIC_RELOCATE code.  */
+#define RESOLVE_MAP(l, scope, ref, version, r_type)			      \
+    ((ELFW(ST_BIND) ((*ref)->st_info) != STB_LOCAL			      \
+      && __glibc_likely (!dl_symbol_visibility_binds_local_p (*ref)))	      \
+     ? ((__glibc_unlikely ((*ref) == l->l_lookup_cache.sym)		      \
+	 && elf_machine_type_class (r_type) == l->l_lookup_cache.type_class)  \
+	? (bump_num_cache_relocations (),				      \
+	   (*ref) = l->l_lookup_cache.ret,				      \
+	   l->l_lookup_cache.value)					      \
+	: ({ lookup_t _lr;						      \
+	     int _tc = elf_machine_type_class (r_type);			      \
+	     l->l_lookup_cache.type_class = _tc;			      \
+	     l->l_lookup_cache.sym = (*ref);				      \
+	     const struct r_found_version *v = NULL;			      \
+	     if ((version) != NULL && (version)->hash != 0)		      \
+	       v = (version);						      \
+	     _lr = _dl_lookup_symbol_x ((const char *) D_PTR (l, l_info[DT_STRTAB]) + (*ref)->st_name, \
+					l, (ref), scope, v, _tc,	      \
+					DL_LOOKUP_ADD_DEPENDENCY	      \
+					| DL_LOOKUP_FOR_RELOCATE, NULL);      \
+	     l->l_lookup_cache.ret = (*ref);				      \
+	     l->l_lookup_cache.value = _lr; }))				      \
+     : l)
+
+#include "dynamic-link.h"
 
 void
 _dl_relocate_object (struct link_map *l, struct r_scope_elem *scope[],
@@ -179,12 +205,28 @@ _dl_relocate_object (struct link_map *l, struct r_scope_elem *scope[],
   int skip_ifunc = reloc_mode & __RTLD_NOIFUNC;
 
 #ifdef SHARED
+  bool consider_symbind = false;
   /* If we are auditing, install the same handlers we need for profiling.  */
   if ((reloc_mode & __RTLD_AUDIT) == 0)
-    consider_profiling |= GLRO(dl_audit) != NULL;
+    {
+      struct audit_ifaces *afct = GLRO(dl_audit);
+      for (unsigned int cnt = 0; cnt < GLRO(dl_naudit); ++cnt)
+	{
+	  /* Profiling is needed only if PLT hooks are provided.  */
+	  if (afct->ARCH_LA_PLTENTER != NULL
+	      || afct->ARCH_LA_PLTEXIT != NULL)
+	    consider_profiling = 1;
+	  if (afct->symbind != NULL)
+	    consider_symbind = true;
+
+	  afct = afct->next;
+	}
+    }
 #elif defined PROF
   /* Never use dynamic linker profiling for gprof profiling code.  */
 # define consider_profiling 0
+#else
+# define consider_symbind 0
 #endif
 
   if (l->l_relocated)
@@ -243,39 +285,10 @@ _dl_relocate_object (struct link_map *l, struct r_scope_elem *scope[],
   {
     /* Do the actual relocation of the object's GOT and other data.  */
 
-    /* String table object symbols.  */
-    const char *strtab = (const void *) D_PTR (l, l_info[DT_STRTAB]);
-
-    /* This macro is used as a callback from the ELF_DYNAMIC_RELOCATE code.  */
-#define RESOLVE_MAP(ref, version, r_type) \
-    ((ELFW(ST_BIND) ((*ref)->st_info) != STB_LOCAL			      \
-      && __glibc_likely (!dl_symbol_visibility_binds_local_p (*ref)))	      \
-     ? ((__builtin_expect ((*ref) == l->l_lookup_cache.sym, 0)		      \
-	 && elf_machine_type_class (r_type) == l->l_lookup_cache.type_class)  \
-	? (bump_num_cache_relocations (),				      \
-	   (*ref) = l->l_lookup_cache.ret,				      \
-	   l->l_lookup_cache.value)					      \
-	: ({ lookup_t _lr;						      \
-	     int _tc = elf_machine_type_class (r_type);			      \
-	     l->l_lookup_cache.type_class = _tc;			      \
-	     l->l_lookup_cache.sym = (*ref);				      \
-	     const struct r_found_version *v = NULL;			      \
-	     if ((version) != NULL && (version)->hash != 0)		      \
-	       v = (version);						      \
-	     _lr = _dl_lookup_symbol_x (strtab + (*ref)->st_name, l, (ref),   \
-					scope, v, _tc,			      \
-					DL_LOOKUP_ADD_DEPENDENCY	      \
-					| DL_LOOKUP_FOR_RELOCATE, NULL);      \
-	     l->l_lookup_cache.ret = (*ref);				      \
-	     l->l_lookup_cache.value = _lr; }))				      \
-     : l)
-
-#include "dynamic-link.h"
-
-    ELF_DYNAMIC_RELOCATE (l, lazy, consider_profiling, skip_ifunc);
+    ELF_DYNAMIC_RELOCATE (l, scope, lazy, consider_profiling, skip_ifunc);
 
 #ifndef PROF
-    if (__glibc_unlikely (consider_profiling)
+    if ((consider_profiling || consider_symbind)
 	&& l->l_info[DT_PLTRELSZ] != NULL)
       {
 	/* Allocate the array which will contain the already found

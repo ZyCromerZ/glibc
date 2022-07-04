@@ -1,4 +1,4 @@
-/* Copyright (C) 1991-2021 Free Software Foundation, Inc.
+/* Copyright (C) 1991-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -34,8 +34,9 @@ const char *const _sys_errlist_internal[] =
 const char *
 __get_errlist (int errnum)
 {
-  if (errnum >= 0 && errnum < array_length (_sys_errlist_internal))
-    return _sys_errlist_internal[errnum];
+  int mapped = ERR_MAP (errnum);
+  if (mapped >= 0 && mapped < array_length (_sys_errlist_internal))
+    return _sys_errlist_internal[mapped];
   return NULL;
 }
 
@@ -67,10 +68,11 @@ static const unsigned short _sys_errnameidx[] =
 const char *
 __get_errname (int errnum)
 {
-  if (errnum < 0 || errnum >= array_length (_sys_errnameidx)
-      || (errnum > 0 && _sys_errnameidx[errnum] == 0))
+  int mapped = ERR_MAP (errnum);
+  if (mapped < 0 || mapped >= array_length (_sys_errnameidx)
+      || (mapped > 0 && _sys_errnameidx[mapped] == 0))
     return NULL;
-  return _sys_errname.str + _sys_errnameidx[errnum];
+  return _sys_errname.str + _sys_errnameidx[mapped];
 }
 
 #include <errlist-compat.c>

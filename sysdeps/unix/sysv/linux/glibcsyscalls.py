@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # Helpers for glibc system call list processing.
-# Copyright (C) 2018-2021 Free Software Foundation, Inc.
+# Copyright (C) 2018-2022 Free Software Foundation, Inc.
 # This file is part of the GNU C Library.
 #
 # The GNU C Library is free software; you can redistribute it and/or
@@ -41,7 +41,7 @@ RE_PSEUDO_SYSCALL = re.compile(r"""__NR_(
     (unused|reserved)[0-9]+
 
     # Pseudo-system call which describes a range.
-    |(syscalls|arch_specific_syscall|(OABI_)?SYSCALL_BASE)
+    |(syscalls|arch_specific_syscall|(OABI_)?SYSCALL_BASE|SYSCALL_MASK)
     |(|64_|[NO]32_)Linux(_syscalls)?
    )""", re.X)
 

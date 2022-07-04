@@ -1,5 +1,5 @@
 /* Definitions for thread-local data handling.  Hurd/i386 version.
-   Copyright (C) 2003-2021 Free Software Foundation, Inc.
+   Copyright (C) 2003-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -368,6 +368,25 @@ _hurd_tls_new (thread_t child, struct i386_thread_state *state, tcbhead_t *tcb)
   state->gs = sel;
   return err;
 }
+
+/* Global scope switch support.  */
+# define THREAD_GSCOPE_FLAG_UNUSED 0
+# define THREAD_GSCOPE_FLAG_USED   1
+# define THREAD_GSCOPE_FLAG_WAIT   2
+
+# define THREAD_GSCOPE_SET_FLAG() \
+  THREAD_SETMEM (THREAD_SELF, gscope_flag, THREAD_GSCOPE_FLAG_USED)
+
+# define THREAD_GSCOPE_RESET_FLAG() \
+  ({                                                                         \
+    int __flag;                                                              \
+    asm volatile ("xchgl %0, %%gs:%P1"                                       \
+                  : "=r" (__flag)                                            \
+                  : "i" (offsetof (tcbhead_t, gscope_flag)),                 \
+                    "0" (THREAD_GSCOPE_FLAG_UNUSED));                        \
+    if (__flag == THREAD_GSCOPE_FLAG_WAIT)                                   \
+      lll_wake (THREAD_SELF->gscope_flag, LLL_PRIVATE);                      \
+  })
 
 #endif	/* !__ASSEMBLER__ */
 

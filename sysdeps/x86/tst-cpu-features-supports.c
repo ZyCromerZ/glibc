@@ -1,6 +1,6 @@
 /* Test CPU feature data against __builtin_cpu_supports.
    This file is part of the GNU C Library.
-   Copyright (C) 2020-2021 Free Software Foundation, Inc.
+   Copyright (C) 2020-2022 Free Software Foundation, Inc.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -130,7 +130,7 @@ do_test (int argc, char **argv)
   fails += CHECK_FEATURE_ACTIVE (gfni, GFNI);
 #endif
 #if __GNUC_PREREQ (11, 0)
-  fails += CHECK_FEATURE_ACTIVE (hle, HLE);
+  fails += CHECK_FEATURE_PRESENT (hle, HLE);
   fails += CHECK_FEATURE_PRESENT (ibt, IBT);
   fails += CHECK_FEATURE_ACTIVE (lahf_lm, LAHF64_SAHF64);
   fails += CHECK_FEATURE_PRESENT (lm, LM);

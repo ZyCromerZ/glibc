@@ -1,4 +1,4 @@
-/* Copyright (C) 1995-2021 Free Software Foundation, Inc.
+/* Copyright (C) 1995-2022 Free Software Foundation, Inc.
 
    This file is part of the GNU C Library.
 
@@ -24,7 +24,9 @@
 #include <sysdep.h>
 #include <tls.h>
 #include <dl-tlsdesc.h>
+#include <dl-static-tls.h>
 #include <dl-irel.h>
+#include <dl-machine-rel.h>
 #include <cpu-features.c>
 
 /* Translate a processor specific dynamic tag to the index in l_info array.  */
@@ -37,35 +39,30 @@ elf_machine_matches_host (const ElfW(Ehdr) *ehdr)
   return ehdr->e_machine == EM_AARCH64;
 }
 
-/* Return the link-time address of _DYNAMIC.  Conveniently, this is the
-   first element of the GOT. */
-static inline ElfW(Addr) __attribute__ ((unused))
-elf_machine_dynamic (void)
-{
-  extern const ElfW(Addr) _GLOBAL_OFFSET_TABLE_[] attribute_hidden;
-  return _GLOBAL_OFFSET_TABLE_[0];
-}
-
 /* Return the run-time load address of the shared object.  */
 
 static inline ElfW(Addr) __attribute__ ((unused))
 elf_machine_load_address (void)
 {
-  /* To figure out the load address we use the definition that for any symbol:
-     dynamic_addr(symbol) = static_addr(symbol) + load_addr
+  extern const ElfW(Ehdr) __ehdr_start attribute_hidden;
+  return (ElfW(Addr)) &__ehdr_start;
+}
 
-    _DYNAMIC sysmbol is used here as its link-time address stored in
-    the special unrelocated first GOT entry.  */
+/* Return the link-time address of _DYNAMIC.  */
 
-    extern ElfW(Dyn) _DYNAMIC[] attribute_hidden;
-    return (ElfW(Addr)) &_DYNAMIC - elf_machine_dynamic ();
+static inline ElfW(Addr) __attribute__ ((unused))
+elf_machine_dynamic (void)
+{
+  extern ElfW(Dyn) _DYNAMIC[] attribute_hidden;
+  return (ElfW(Addr)) _DYNAMIC - elf_machine_load_address ();
 }
 
 /* Set up the loaded object described by L so its unrelocated PLT
    entries will jump to the on-demand fixup code in dl-runtime.c.  */
 
 static inline int __attribute__ ((unused))
-elf_machine_runtime_setup (struct link_map *l, int lazy, int profile)
+elf_machine_runtime_setup (struct link_map *l, struct r_scope_elem *scope[],
+			   int lazy, int profile)
 {
   if (l->l_info[DT_JMPREL] && lazy)
     {
@@ -195,10 +192,6 @@ _dl_start_user:								\n\
 
 #define ELF_MACHINE_JMP_SLOT	AARCH64_R(JUMP_SLOT)
 
-/* AArch64 uses RELA not REL */
-#define ELF_MACHINE_NO_REL 1
-#define ELF_MACHINE_NO_RELA 0
-
 #define DL_PLATFORM_INIT dl_platform_init ()
 
 static inline void __attribute__ ((unused))
@@ -243,10 +236,11 @@ elf_machine_plt_value (struct link_map *map,
 
 #ifdef RESOLVE_MAP
 
-auto inline void
+static inline void
 __attribute__ ((always_inline))
-elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
-		  const ElfW(Sym) *sym, const struct r_found_version *version,
+elf_machine_rela (struct link_map *map, struct r_scope_elem *scope[],
+		  const ElfW(Rela) *reloc, const ElfW(Sym) *sym,
+		  const struct r_found_version *version,
 		  void *const reloc_addr_arg, int skip_ifunc)
 {
   ElfW(Addr) *const reloc_addr = reloc_addr_arg;
@@ -259,7 +253,8 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
   else
     {
       const ElfW(Sym) *const refsym = sym;
-      struct link_map *sym_map = RESOLVE_MAP (&sym, version, r_type);
+      struct link_map *sym_map = RESOLVE_MAP (map, scope, &sym, version,
+					      r_type);
       ElfW(Addr) value = SYMBOL_ADDRESS (sym_map, sym, true);
 
       if (sym != NULL
@@ -373,7 +368,7 @@ elf_machine_rela (struct link_map *map, const ElfW(Rela) *reloc,
     }
 }
 
-inline void
+static inline void
 __attribute__ ((always_inline))
 elf_machine_rela_relative (ElfW(Addr) l_addr,
 			   const ElfW(Rela) *reloc,
@@ -383,9 +378,9 @@ elf_machine_rela_relative (ElfW(Addr) l_addr,
   *reloc_addr = l_addr + reloc->r_addend;
 }
 
-inline void
+static inline void
 __attribute__ ((always_inline))
-elf_machine_lazy_rel (struct link_map *map,
+elf_machine_lazy_rel (struct link_map *map, struct r_scope_elem *scope[],
 		      ElfW(Addr) l_addr,
 		      const ElfW(Rela) *reloc,
 		      int skip_ifunc)
@@ -412,7 +407,7 @@ elf_machine_lazy_rel (struct link_map *map,
 		    (const void *)D_PTR (map, l_info[VERSYMIDX (DT_VERSYM)]);
 		  version = &map->l_versions[vernum[symndx] & 0x7fff];
 		}
-	      elf_machine_rela (map, reloc, sym, version, reloc_addr,
+	      elf_machine_rela (map, scope, reloc, sym, version, reloc_addr,
 				skip_ifunc);
 	      return;
 	    }
@@ -439,7 +434,8 @@ elf_machine_lazy_rel (struct link_map *map,
 
       /* Always initialize TLS descriptors completely, because lazy
 	 initialization requires synchronization at every TLS access.  */
-      elf_machine_rela (map, reloc, sym, version, reloc_addr, skip_ifunc);
+      elf_machine_rela (map, scope, reloc, sym, version, reloc_addr,
+			skip_ifunc);
     }
   else if (__glibc_unlikely (r_type == AARCH64_R(IRELATIVE)))
     {

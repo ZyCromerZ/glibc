@@ -1,6 +1,6 @@
 /* Check if the thread created by POSIX timer using SIGEV_THREAD is
    cancellable.
-   Copyright (C) 2020-2021 Free Software Foundation, Inc.
+   Copyright (C) 2020-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -69,7 +69,6 @@ do_test (void)
 
   xpthread_cancel (timer_thread);
 
-  xpthread_barrier_init (&barrier, NULL, 2);
   xpthread_barrier_wait (&barrier);
 
   return 0;

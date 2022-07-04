@@ -1,6 +1,5 @@
-/* Copyright (C) 2002-2021 Free Software Foundation, Inc.
+/* Copyright (C) 2002-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
-   Contributed by Ulrich Drepper <drepper@redhat.com>, 2002.
 
    The GNU C Library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Lesser General Public
@@ -33,10 +32,12 @@
 #include <default-sched.h>
 #include <futex-internal.h>
 #include <tls-setup.h>
+#include <rseq-internal.h>
 #include "libioP.h"
 #include <sys/single_threaded.h>
 #include <version.h>
 #include <clone_internal.h>
+#include <futex-internal.h>
 
 #include <shlib-compat.h>
 
@@ -366,6 +367,13 @@ start_thread (void *arg)
   /* Initialize pointers to locale data.  */
   __ctype_init ();
 
+  /* Register rseq TLS to the kernel.  */
+  {
+    bool do_rseq = THREAD_GETMEM (pd, flags) & ATTR_FLAG_DO_RSEQ;
+    if (!rseq_register_current_thread (pd, do_rseq) && do_rseq)
+      __libc_fatal ("Fatal glibc error: rseq registration failed\n");
+  }
+
 #ifndef __ASSUME_SET_ROBUST_LIST
   if (__nptl_set_robust_list_avail)
 #endif
@@ -406,8 +414,6 @@ start_thread (void *arg)
   unwind_buf.priv.data.prev = NULL;
   unwind_buf.priv.data.cleanup = NULL;
 
-  __libc_signal_restore_set (&pd->sigmask);
-
   /* Allow setxid from now onwards.  */
   if (__glibc_unlikely (atomic_exchange_acq (&pd->setxid_futex, 0) == -2))
     futex_wake (&pd->setxid_futex, 1, FUTEX_PRIVATE);
@@ -416,6 +422,8 @@ start_thread (void *arg)
     {
       /* Store the new cleanup handler info.  */
       THREAD_SETMEM (pd, cleanup_jmp_buf, &unwind_buf);
+
+      __libc_signal_restore_set (&pd->sigmask);
 
       LIBC_PROBE (pthread_start, 3, (pthread_t) pd, pd->start_routine, pd->arg);
 
@@ -485,6 +493,27 @@ start_thread (void *arg)
     /* This was the last thread.  */
     exit (0);
 
+  /* This prevents sending a signal from this thread to itself during
+     its final stages.  This must come after the exit call above
+     because atexit handlers must not run with signals blocked.
+
+     Do not block SIGSETXID.  The setxid handshake below expects the
+     signal to be delivered.  (SIGSETXID cannot run application code,
+     nor does it use pthread_kill.)  Reuse the pd->sigmask space for
+     computing the signal mask, to save stack space.  */
+  __sigfillset (&pd->sigmask);
+  __sigdelset (&pd->sigmask, SIGSETXID);
+  INTERNAL_SYSCALL_CALL (rt_sigprocmask, SIG_BLOCK, &pd->sigmask, NULL,
+			 __NSIG_BYTES);
+
+  /* Tell __pthread_kill_internal that this thread is about to exit.
+     If there is a __pthread_kill_internal in progress, this delays
+     the thread exit until the signal has been queued by the kernel
+     (so that the TID used to send it remains valid).  */
+  __libc_lock_lock (pd->exit_lock);
+  pd->exiting = true;
+  __libc_lock_unlock (pd->exit_lock);
+
 #ifndef __ASSUME_SET_ROBUST_LIST
   /* If this thread has any robust mutexes locked, handle them now.  */
 # if __PTHREAD_MUTEX_HAVE_PREV
@@ -549,6 +578,15 @@ out:
      The 'exit' implementation in the kernel will signal when the
      process is really dead since 'clone' got passed the CLONE_CHILD_CLEARTID
      flag.  The 'tid' field in the TCB will be set to zero.
+
+     rseq TLS is still registered at this point.  Rely on implicit
+     unregistration performed by the kernel on thread teardown.  This is not a
+     problem because the rseq TLS lives on the stack, and the stack outlives
+     the thread.  If TCB allocation is ever changed, additional steps may be
+     required, such as performing explicit rseq unregistration before
+     reclaiming the rseq TLS area memory.  It is NOT sufficient to block
+     signals because the kernel may write to the rseq area even without
+     signals.
 
      The exit code is zero since in case all threads exit by calling
      'pthread_exit' the exit status must be 0 (zero).  */
@@ -642,6 +680,11 @@ __pthread_create_2_1 (pthread_t *newthread, const pthread_attr_t *attr,
   struct pthread *self = THREAD_SELF;
   pd->flags = ((iattr->flags & ~(ATTR_FLAG_SCHED_SET | ATTR_FLAG_POLICY_SET))
 	       | (self->flags & (ATTR_FLAG_SCHED_SET | ATTR_FLAG_POLICY_SET)));
+
+  /* Inherit rseq registration state.  Without seccomp filters, rseq
+     registration will either always fail or always succeed.  */
+  if ((int) THREAD_GETMEM_VOLATILE (self, rseq_area.cpu_id) >= 0)
+    pd->flags |= ATTR_FLAG_DO_RSEQ;
 
   /* Initialize the field for the ID of the thread which is waiting
      for us.  This is a self-reference in case the thread is created

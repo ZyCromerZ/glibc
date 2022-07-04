@@ -1,5 +1,5 @@
 /* PLT trampolines.  Sparc 64-bit version.
-   Copyright (C) 2005-2021 Free Software Foundation, Inc.
+   Copyright (C) 2005-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -196,7 +196,7 @@ _dl_profile_invoke:
 	mov	%l5, %o0
 	mov	%l6, %o1
 	add	%sp, STACK_BIAS + (24 * 8), %o2
-	call	_dl_call_pltexit
+	call	_dl_audit_pltexit
 	 add	%sp, STACK_BIAS + (16 * 8), %o3
 
 	ldx	[%sp + STACK_BIAS + (16 * 8)], %i0

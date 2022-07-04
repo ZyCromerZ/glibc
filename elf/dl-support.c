@@ -1,5 +1,5 @@
 /* Support for dynamic linking code in static libc.
-   Copyright (C) 1996-2021 Free Software Foundation, Inc.
+   Copyright (C) 1996-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -43,6 +43,7 @@
 #include <dl-vdso.h>
 #include <dl-vdso-setup.h>
 #include <dl-auxv.h>
+#include <dl-find_object.h>
 
 extern char *__progname;
 char **_dl_argv = &__progname;	/* This is checked for some error messages.  */
@@ -166,6 +167,8 @@ size_t _dl_phnum;
 uint64_t _dl_hwcap;
 uint64_t _dl_hwcap2;
 
+enum dso_sort_algorithm _dl_dso_sort_algo;
+
 /* The value of the FPU control word the kernel will preset in hardware.  */
 fpu_control_t _dl_fpu_control = _FPU_DEFAULT;
 
@@ -183,7 +186,7 @@ uint64_t _dl_hwcap_mask;
  * executable but this isn't true for all platforms.  */
 ElfW(Word) _dl_stack_flags = DEFAULT_STACK_PERMS;
 
-#if THREAD_GSCOPE_IN_TCB
+#if PTHREAD_IN_LIBC
 list_t _dl_stack_used;
 list_t _dl_stack_user;
 list_t _dl_stack_cache;
@@ -195,7 +198,6 @@ int _dl_stack_cache_lock;
    when it was not, we do it by calling this function.
    It returns an errno code or zero on success.  */
 int (*_dl_make_stack_executable_hook) (void **) = _dl_make_stack_executable;
-int _dl_thread_gscope_count;
 void (*_dl_init_static_tls) (struct link_map *) = &_dl_nothread_init_static_tls;
 #endif
 struct dl_scope_free_list *_dl_scope_free_list;
@@ -229,6 +231,13 @@ __rtld_lock_define_initialized_recursive (, _dl_load_lock)
    list of loaded objects while an object is added to or removed from
    that list.  */
 __rtld_lock_define_initialized_recursive (, _dl_load_write_lock)
+  /* This lock protects global and module specific TLS related data.
+     E.g. it is held in dlopen and dlclose when GL(dl_tls_generation),
+     GL(dl_tls_max_dtv_idx) or GL(dl_tls_dtv_slotinfo_list) are
+     accessed and when TLS related relocations are processed for a
+     module.  It was introduced to keep pthread_create accessing TLS
+     state that is being set up.  */
+__rtld_lock_define_initialized_recursive (, _dl_load_tls_lock)
 
 
 #ifdef HAVE_AUX_VECTOR
@@ -409,6 +418,8 @@ _dl_non_dynamic_init (void)
 	  break;
 	}
 
+  call_function_static_weak (_dl_find_object_init);
+
   /* Setup relro on the binary itself.  */
   if (_dl_main_map.l_relro_size != 0)
     _dl_protect_relro (&_dl_main_map);
@@ -428,3 +439,11 @@ _dl_get_dl_main_map (void)
   return &_dl_main_map;
 }
 #endif
+
+/* This is used by _dl_runtime_profile, not used on static code.  */
+void
+DL_ARCH_FIXUP_ATTRIBUTE
+_dl_audit_pltexit (struct link_map *l, ElfW(Word) reloc_arg,
+		   const void *inregs, void *outregs)
+{
+}

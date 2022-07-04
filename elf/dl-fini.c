@@ -1,5 +1,5 @@
 /* Call the termination functions of loaded shared objects.
-   Copyright (C) 1995-2021 Free Software Foundation, Inc.
+   Copyright (C) 1995-2022 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -64,6 +64,10 @@ _dl_fini (void)
 	__rtld_lock_unlock_recursive (GL(dl_load_lock));
       else
 	{
+#ifdef SHARED
+	  _dl_audit_activity_nsid (ns, LA_ACT_DELETE);
+#endif
+
 	  /* Now we can allocate an array to hold all the pointers and
 	     copy the pointers in.  */
 	  struct link_map *maps[nloaded];
@@ -92,8 +96,7 @@ _dl_fini (void)
 	  /* Now we have to do the sorting.  We can skip looking for the
 	     binary itself which is at the front of the search list for
 	     the main namespace.  */
-	  _dl_sort_maps (maps + (ns == LM_ID_BASE), nmaps - (ns == LM_ID_BASE),
-			 NULL, true);
+	  _dl_sort_maps (maps, nmaps, (ns == LM_ID_BASE), true);
 
 	  /* We do not rely on the linked list of loaded object anymore
 	     from this point on.  We have our own list here (maps).  The
@@ -147,27 +150,17 @@ _dl_fini (void)
 
 #ifdef SHARED
 		  /* Auditing checkpoint: another object closed.  */
-		  if (!do_audit && __builtin_expect (GLRO(dl_naudit) > 0, 0))
-		    {
-		      struct audit_ifaces *afct = GLRO(dl_audit);
-		      for (unsigned int cnt = 0; cnt < GLRO(dl_naudit); ++cnt)
-			{
-			  if (afct->objclose != NULL)
-			    {
-			      struct auditstate *state
-				= link_map_audit_state (l, cnt);
-			      /* Return value is ignored.  */
-			      (void) afct->objclose (&state->cookie);
-			    }
-			  afct = afct->next;
-			}
-		    }
+		  _dl_audit_objclose (l);
 #endif
 		}
 
 	      /* Correct the previous increment.  */
 	      --l->l_direct_opencount;
 	    }
+
+#ifdef SHARED
+	  _dl_audit_activity_nsid (ns, LA_ACT_CONSISTENT);
+#endif
 	}
     }
 
